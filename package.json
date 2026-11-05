@@ -1,0 +1,51 @@
+{
+  "name": "@comchatx/cx-board-tasks",
+  "version": "0.1.0",
+  "description": "The to-do and question module of cx's board: proposals, choices and inputs the seller answers there.",
+  "license": "MIT",
+  "author": "ComChatX",
+  "homepage": "https://github.com/comchatx/cx-board-tasks#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/comchatx/cx-board-tasks.git"
+  },
+  "bugs": "https://github.com/comchatx/cx-board-tasks/issues",
+  "keywords": [
+    "pi-package"
+  ],
+  "type": "module",
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "files": [
+    "skills"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "comchatx": {
+    "about": "在对话旁设一块看板，cx 把发现、改动、建议和问题留在上面。",
+    "mark": {
+      "line": "clipboard"
+    },
+    "section": "extensions",
+    "order": 111,
+    "skills": {
+      "cx-board-tasks": {
+        "about": {
+          "en": "Tells cx where the board is and what an entry holds.",
+          "zh": "告诉 cx 看板在哪里、每一条写什么。"
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@types/node": "26.2.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}
