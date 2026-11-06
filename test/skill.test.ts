@@ -13,7 +13,8 @@ it("tells cx of the module's kinds, places and answers, and that a question whic
   for (const gone of ["timed_out", "prefer the board"]) expect(skill, gone).not.toContain(gone);
 });
 
-it("keeps a question cx can ask now in the turn, owns the places, marks and the column opening by itself, and keeps todo/ the seller's", () => {
+it("keeps a question cx can ask now in the turn, owns the places and marks, leaves the column opening by itself to the base, and keeps todo/ the seller's", () => {
   expect(skill).toContain("A question you can ask now, ask in your turn");
-  for (const said of ["a tab of its own: the directory `待办` under the board", "`待办/todo/` for what waits for the seller and `待办/done/`", "a file in any other tab is a card and nothing more", "已读 / Mark as read", "opens beside the chat by itself", "It is not your own list of steps", "Nothing under `todo/` or `done/` is deleted."]) expect(skill, said).toContain(said);
+  for (const said of ["a tab of its own: the directory `待办` under the board", "`待办/todo/` for what waits for the seller and `待办/done/`", "a file in any other tab is a card and nothing more", "已读 / Mark as read", "It is not your own list of steps", "Nothing under `todo/` or `done/` is deleted."]) expect(skill, said).toContain(said);
+  expect(skill).not.toContain("by itself");
 });

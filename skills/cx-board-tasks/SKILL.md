@@ -3,7 +3,7 @@ name: cx-board-tasks
 description: The to-do and question module of the seller's board, where you leave what you found, changed, propose and ask, as entries the seller marks or answers. Use when you leave the seller an entry with a kind, when a question has to wait for the seller, and when the seller's message answers entries on the board.
 ---
 
-This module draws on the board the `cx-board` skill describes, in a tab of its own: the directory `待办` under the board. Without it every file is a card of a title and words, and nothing more; with it the tab has two places, `待办/todo/` for what waits for the seller and `待办/done/` for what the seller has done with, an entry's front matter gives it a kind, the seller marks what is to read and answers what asks, and the column opens beside the chat by itself when a turn of yours leaves a new file.
+This module draws on the board the `cx-board` skill describes, in a tab of its own: the directory `待办` under the board. Without it every file is a card of a title and words, and nothing more; with it the tab has two places, `待办/todo/` for what waits for the seller and `待办/done/` for what the seller has done with, an entry's front matter gives it a kind, and the seller marks what is to read and answers what asks.
 
 `todo/` holds what waits for the seller. It is not your own list of steps: keep that in the chat, or with a tool for it if one is installed.
 
