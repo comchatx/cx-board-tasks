@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-board-tasks",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The to-do and question module of cx's board: proposals, choices and inputs the seller answers there.",
   "license": "MIT",
   "author": "ComChatX",

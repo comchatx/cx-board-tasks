@@ -1,9 +1,11 @@
 ---
 name: cx-board-tasks
-description: The to-do and question module of the seller's board, where you leave what you found, changed, propose and ask, as entries the seller answers. Use when you leave the seller an entry with a kind, and when the seller's message answers entries on the board.
+description: The to-do and question module of the seller's board, where you leave what you found, changed, propose and ask, as entries the seller marks or answers. Use when you leave the seller an entry with a kind, when a question has to wait for the seller, and when the seller's message answers entries on the board.
 ---
 
-This module draws on the board the `cx-board` skill describes. Without it every file is read as a heading and words; with it an entry's front matter gives it a kind, and the seller answers what asks.
+This module draws on the board the `cx-board` skill describes. Without it every file is a card of a title and words, and nothing more; with it the board has two places, `todo/` for what waits for the seller and `done/` for what the seller has done with, an entry's front matter gives it a kind, the seller marks what is to read and answers what asks, and the column opens beside the chat by itself when a turn of yours leaves a new file.
+
+`todo/` holds what waits for the seller. It is not your own list of steps: keep that in the chat, or with a tool for it if one is installed.
 
 ## An entry
 
@@ -30,7 +32,9 @@ Your words.
 
 A file without these three, or with another kind, is drawn as the base draws one: its heading or its name, and its words.
 
-A question that has to wait for the seller's answer can be written as a `choice` or an `input` entry on the board: you end your turn and go on, and the answer comes back to you as a message in the chat.
+A question you can ask now, ask in your turn: in your reply, or with a tool that asks the seller if one is installed, which the seller answers on a card in the chat. A question that has to wait for the seller's answer can be written as a `choice` or an `input` entry on the board: you end your turn and go on, and the answer comes back to you as a message in the chat.
+
+A file directly in the board directory, beside `todo/`, waits as one under `todo/` does.
 
 ## The page's names
 
@@ -42,7 +46,7 @@ Call the board's parts by the names the seller sees, in the seller's language: �
 - **忽略 / Dismiss**, on a proposal, a choice or an input: the file moves to `done/`. You are not told. A dismissed proposal is not agreed, and nothing is done for it.
 - **An answer**: the seller agrees to a proposal, picks an option or types into an input, and sends the answers with 交给 cx / Send to cx. The files move to `done/`.
 
-A file moved to `done/` keeps every line you wrote and gains `done` (`read`, `dismissed` or `answered`), `doneAt` and, when one went, `answer`. Nothing on the board is deleted.
+A file moved to `done/` keeps every line you wrote and gains `done` (`read`, `dismissed` or `answered`), `doneAt` and, when one went, `answer`. Nothing under `todo/` or `done/` is deleted.
 
 ## The seller's answers
 
