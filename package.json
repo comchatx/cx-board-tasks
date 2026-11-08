@@ -20,7 +20,8 @@
     ]
   },
   "files": [
-    "skills"
+    "skills",
+    "README.zh-CN.md"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
