@@ -1,7 +1,7 @@
 {
   "name": "@comchatx/cx-board-tasks",
   "version": "0.2.0",
-  "description": "The to-do and question module of cx's board: proposals, choices and inputs the seller answers there.",
+  "description": "Board to-dos you read or answer, then find under Done.",
   "license": "MIT",
   "author": "ComChatX",
   "homepage": "https://github.com/comchatx/cx-board-tasks#readme",
@@ -37,8 +37,8 @@
     "skills": {
       "cx-board-tasks": {
         "about": {
-          "en": "Tells cx where the board is and what an entry holds.",
-          "zh": "告诉 cx 看板在哪里、每一条写什么。"
+          "en": "Tells cx what a to-do holds and how your answers come back.",
+          "zh": "告诉 cx 待办写什么、你的答复如何传回。"
         }
       }
     }
