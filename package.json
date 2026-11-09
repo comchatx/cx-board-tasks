@@ -1,7 +1,7 @@
 {
   "name": "@comchatx/cx-board-tasks",
-  "version": "0.1.1",
-  "description": "The to-do and question module of cx's board: proposals, choices and inputs the seller answers there.",
+  "version": "0.2.0",
+  "description": "Board to-dos you read or answer, then find under Done.",
   "license": "MIT",
   "author": "ComChatX",
   "homepage": "https://github.com/comchatx/cx-board-tasks#readme",
@@ -28,7 +28,7 @@
     "test": "vitest run"
   },
   "comchatx": {
-    "about": "在对话旁设一块看板，cx 把发现、改动、建议和问题留在上面。",
+    "about": "看板上的待办：已读、已处理、历史，和要你回答的建议、选择、填写。",
     "mark": {
       "line": "clipboard"
     },
@@ -37,8 +37,8 @@
     "skills": {
       "cx-board-tasks": {
         "about": {
-          "en": "Tells cx where the board is and what an entry holds.",
-          "zh": "告诉 cx 看板在哪里、每一条写什么。"
+          "en": "Tells cx what a to-do holds and how your answers come back.",
+          "zh": "告诉 cx 待办写什么、你的答复如何传回。"
         }
       }
     }
