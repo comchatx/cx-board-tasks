@@ -38,3 +38,8 @@ it("ships its skills, its README in English and in Chinese and its license, and 
   expect(packed[0]!.files.map((file) => file.path).sort()).toEqual(["LICENSE", "README.md", "README.zh-CN.md", "package.json", ...skills].sort());
   expect(manifest.files).toEqual(["skills", "README.zh-CN.md"]);
 });
+
+it("names cx-board in builds as required, so the Plugins page installs the board with the module", () => {
+  // A builds entry given by its npm name alone is a required one; the module's to-dos live on the board's tab.
+  expect((manifest.comchatx as Record<string, unknown>)["builds"]).toEqual(["@comchatx/cx-board"]);
+});
