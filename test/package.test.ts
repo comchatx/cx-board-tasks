@@ -43,3 +43,8 @@ it("names cx-board in builds as required, so the Plugins page installs the board
   // A builds entry given by its npm name alone is a required one; the module's to-dos live on the board's tab.
   expect((manifest.comchatx as Record<string, unknown>)["builds"]).toEqual(["@comchatx/cx-board"]);
 });
+
+it("the card's name is comchatx.name, the one signed on 2026-11-11", () => {
+  const field = (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { comchatx: { name?: unknown } }).comchatx;
+  expect(field.name).toBe("Board To-dos");
+});
