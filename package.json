@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-board-tasks",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Lists what needs your decision, and sends cx every answer.",
   "license": "MIT",
   "author": "ComChatX",
@@ -28,6 +28,7 @@
     "test": "vitest run"
   },
   "comchatx": {
+    "name": "Board To-dos",
     "about": "要你决定的事列进待办，答完一次交给 cx。",
     "mark": {
       "line": "clipboard"
