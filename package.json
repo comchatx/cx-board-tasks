@@ -53,7 +53,14 @@
       }
     },
     "builds": [
-      "@comchatx/cx-board"
+      {
+        "on": "@comchatx/cx-board",
+        "need": "required",
+        "why": {
+          "en": "Shows your Inbox beside the chat.",
+          "zh": "用于在对话旁显示收件箱。"
+        }
+      }
     ]
   },
   "devDependencies": {

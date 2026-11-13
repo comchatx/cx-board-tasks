@@ -39,9 +39,8 @@ it("ships its skills, its page, its README in English and in Chinese and its lic
   expect(manifest.files).toEqual(["skills", "page", "README.zh-CN.md"]);
 });
 
-it("names cx-board in builds as required, so the Plugins page installs the board with the module", () => {
-  // A builds entry given by its npm name alone is a required one; the module's to-dos live on the board's tab.
-  expect((manifest.comchatx as Record<string, unknown>)["builds"]).toEqual(["@comchatx/cx-board"]);
+it("names cx-board in builds as required, with the signed sentence why, so the Plugins page installs the board with the Inbox", () => {
+  expect((manifest.comchatx as Record<string, unknown>)["builds"]).toEqual([{ on: "@comchatx/cx-board", need: "required", why: { en: "Shows your Inbox beside the chat.", zh: "用于在对话旁显示收件箱。" } }]);
 });
 
 it("the card's name, its lines and the skill's row are the ones signed on 2026-11-11", () => {
@@ -53,4 +52,9 @@ it("declares its page for the module's tab, 待办, named 收件箱 / Inbox, a f
   const board = (manifest.comchatx as Record<string, unknown>)["board"] as { tab: string; page: string; name: unknown };
   expect(board).toEqual({ tab: "待办", page: "page/inbox.html", name: { zh: "收件箱", en: "Inbox" } });
   expect(readFileSync(join(ROOT, board.page), "utf8")).toContain("window.cxBoard");
+});
+
+it("opens each README with its signed first paragraph", () => {
+  expect(readFileSync(join(ROOT, "README.md"), "utf8").split("\n")[0]).toBe("What cx found or changed waits in your Inbox on the board for you to mark as read, beside proposals and questions to answer. Each answer goes to cx as you send it. It needs cx-board installed too.");
+  expect(readFileSync(join(ROOT, "README.zh-CN.md"), "utf8").split("\n")[0]).toBe("cx 查到的发现、做过的修改放在看板的「收件箱」里，看过点「已读」；要你同意、选择或填写的也在这里，直接回答，cx 接着做。它需要 cx-board，两个插件都要安装。");
 });

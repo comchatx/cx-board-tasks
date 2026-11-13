@@ -23,3 +23,9 @@ it("gives the page's names as signed, and the skill's row as signed, its first s
 it("states facts and no procedure: no step tells cx when to write a card, and nothing of 0.2's places and Send to cx is left", () => {
   for (const gone of ["交给 cx", "Send to cx", "you should", "always ", "must ", "`choice` or an `input` entry"]) expect(skill, gone).not.toContain(gone);
 });
+
+it("says which card stands first and in what order the rest stand, as the page draws them", () => {
+  expect(skill).toContain("`reply: true` makes the card your answer to the seller's last message: the Inbox shows the newest such card first.");
+  expect(skill).toContain("Then the cards that ask, then those that tell, each part newest first by the file's time.");
+  expect(skill).toContain("The seller may dismiss a card that asks, 忽略 / Dismiss.");
+});

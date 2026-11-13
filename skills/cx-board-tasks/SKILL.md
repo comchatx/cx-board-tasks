@@ -20,8 +20,9 @@ Your words.
 
 - `title` is the one line the seller reads first. Without it, the card's first heading is its title.
 - `asks: true` makes the card one that asks: the seller answers it in a field on the card, in their own words. A card without it tells, and the seller ticks it 已读 / Mark as read.
-- The seller may dismiss any card, 忽略 / Dismiss.
-- The seller reads each card on its own, in the Inbox, newest first.
+- The seller may dismiss a card that asks, 忽略 / Dismiss.
+- `reply: true` makes the card your answer to the seller's last message: the Inbox shows the newest such card first.
+- Then the cards that ask, then those that tell, each part newest first by the file's time. The seller reads each card on its own.
 - A card does not hold your turn. You go on, and the seller answers when they come to it.
 
 ## The page's names
