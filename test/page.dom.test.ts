@@ -170,3 +170,93 @@ it("says what cx leaves will be here before anything came", async () => {
   await settle();
   expect(document.querySelector(".board-empty")!.textContent).toBe("What cx leaves for you will be here.");
 });
+
+it("keeps what cx wrote to a card while its answer was on its way, and what it wrote to a dismissed card before it was taken back", async () => {
+  const made = open({ "b.md": ASK });
+  await settle();
+  let accept: (said: string) => void = () => {};
+  made.board.send.mockImplementationOnce(() => new Promise<string>((done) => { accept = done; }));
+  const field = cardOf("b.md").querySelector<HTMLInputElement>("input")!;
+  field.value = "Twenty";
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  await settle();
+  made.add("b.md", ASK.replace("40 are left.", "40 are left.\n\ncx: the supplier answered."));
+  accept("sent");
+  await settle();
+  expect(made.held.get("b.md")!.text).toMatch(/\ndone: answered\n[\s\S]*cx: the supplier answered\.\n$/);
+  made.add("c.md", "---\ntitle: Raise the budget?\nasks: true\n---\nWords.\n");
+  made.tell("files");
+  await settle();
+  cardOf("c.md").querySelector<HTMLButtonElement>(".t-mark")!.click();
+  await settle();
+  made.add("c.md", `${made.held.get("c.md")!.text}\ncx: a later line.\n`);
+  document.querySelector<HTMLElement>(".t-gone button")!.click();
+  await settle();
+  expect(made.held.get("c.md")!.text).toBe("---\ntitle: Raise the budget?\nasks: true\n---\nWords.\n\ncx: a later line.\n");
+});
+
+it("keeps the words typed in every card that has not sent them when the page draws again", async () => {
+  const made = open({ "a.md": ASK, "b.md": ASK.replace("Restock the blue kettle?", "Raise the budget?") });
+  await settle();
+  cardOf("a.md").querySelector<HTMLInputElement>("input")!.value = "Twenty";
+  const other = cardOf("b.md").querySelector<HTMLInputElement>("input")!;
+  other.value = "Yes";
+  other.focus();
+  made.add("c.md", TELL);
+  made.tell("files");
+  await settle();
+  expect([cardOf("a.md").querySelector("input")!.value, cardOf("b.md").querySelector("input")!.value]).toEqual(["Twenty", "Yes"]);
+});
+
+it("sends an answer once while it is on its way, its field and Send held until it is", async () => {
+  const made = open({ "b.md": ASK });
+  await settle();
+  let accept: (said: string) => void = () => {};
+  made.board.send.mockImplementationOnce(() => new Promise<string>((done) => { accept = done; }));
+  cardOf("b.md").querySelector<HTMLInputElement>("input")!.value = "Twenty";
+  cardOf("b.md").querySelector<HTMLButtonElement>(".t-reply button")!.click();
+  await settle();
+  const held = cardOf("b.md");
+  expect([held.querySelector("input")!.disabled, held.querySelector<HTMLButtonElement>(".t-reply button")!.disabled, held.querySelector("input")!.value]).toEqual([true, true, "Twenty"]);
+  held.querySelector<HTMLButtonElement>(".t-reply button")!.click();
+  held.querySelector("input")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  accept("sent");
+  await settle();
+  expect(made.board.send).toHaveBeenCalledTimes(1);
+});
+
+it("reaches a card's answer, then Send, then its dismiss by Tab", async () => {
+  open({ "b.md": ASK });
+  await settle();
+  const order = [...cardOf("b.md").querySelectorAll<HTMLElement>("input, button:not([hidden])")].map((one) => one.getAttribute("aria-label") ?? one.textContent);
+  expect(order).toEqual(["Answer “Restock the blue kettle?”", "Send", "Dismiss “Restock the blue kettle?”"]);
+});
+
+it("puts cx's answer to the seller's last message first, the newest card that says it is one, over those that ask", async () => {
+  open({
+    "fee.md": "---\ntitle: The fee is $3.86 a unit\nreply: true\n---\nFrom the fee preview.\n",
+    "b.md": ASK,
+    "a.md": TELL,
+  });
+  await settle();
+  expect(cards()).toEqual(["The fee is $3.86 a unit tells", "Restock the blue kettle? asks", "Storage fees rose tells"]);
+});
+
+it("puts only the newest reply first, an older one in its part", async () => {
+  const made = open({ "old.md": "---\ntitle: Old answer\nreply: true\n---\nx\n", "b.md": ASK });
+  await settle();
+  made.add("new.md", "---\ntitle: New answer\nreply: true\n---\ny\n");
+  made.tell("files");
+  await settle();
+  expect(cards()).toEqual(["New answer tells", "Restock the blue kettle? asks", "Old answer tells"]);
+});
+
+it("keeps the keyboard on the card that had it when the page draws again", async () => {
+  const made = open({ "b.md": ASK, "a.md": TELL });
+  await settle();
+  cardOf("a.md").focus();
+  made.add("c.md", "---\ntitle: New one\n---\n");
+  made.tell("files");
+  await settle();
+  expect(document.activeElement).toBe(cardOf("a.md"));
+});

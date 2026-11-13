@@ -31,6 +31,9 @@
   .t-words.cut > p { display: inline; }
   .t-words.cut > p + p::before { content: " "; }
   .entry.t-card > .t-more { margin-top: 0; }
+  .t-card.t-asks { position: relative; }
+  .t-card.t-asks > .t-head { padding-right: calc(var(--space-7) - var(--space-2) + var(--space-4)); min-height: calc(var(--space-7) - var(--space-1)); }
+  .t-card.t-asks > .t-mark { position: absolute; top: calc(var(--space-4) - var(--space-1)); right: calc(var(--space-5) - var(--space-2)); margin: 0; }
   .t-reply { display: flex; align-items: center; gap: var(--space-4); }
   .t-reply > .entry-field { flex: 1 1 auto; min-width: 0; }
   .t-reply > button { flex: none; }
@@ -117,7 +120,7 @@
       .split(/\r?\n[ \t]*\r?\n/).map((one) => one.replace(/\s+/g, " ").trim()).filter((one) => one !== "");
     const done = DONE.has(keys.get("done")) ? keys.get("done") : undefined;
     const at = Date.parse(keys.get("doneAt") ?? "");
-    return { file, modified, text, title, words, asks: keys.get("asks") === "true" || ASKING.has(keys.get("kind")), done, doneAt: Number.isFinite(at) ? at : modified, answer: keys.get("answer") };
+    return { file, modified, text, title, words, asks: keys.get("asks") === "true" || ASKING.has(keys.get("kind")), reply: keys.get("reply") === "true", done, doneAt: Number.isFinite(at) ? at : modified, answer: keys.get("answer") };
   }
   /** The file with its marks set, every other line and byte as it was; `undefined` takes them out. */
   function marked(text, mark) {
@@ -157,12 +160,18 @@
     if (again) { again = false; void load(); }
   }
 
-  const waiting = () => [...S.cards.values()].filter((c) => c.done === undefined).sort((a, b) => Number(b.asks) - Number(a.asks) || b.modified - a.modified);
+  /** What waits: cx's answer to the seller's last message first (15 A), the newest card that says it is one; then those that ask; each part newest first. */
+  function waiting() {
+    const all = [...S.cards.values()].filter((c) => c.done === undefined).sort((a, b) => Number(b.asks) - Number(a.asks) || b.modified - a.modified);
+    const reply = all.filter((c) => c.reply).sort((a, b) => b.modified - a.modified)[0];
+    return reply === undefined ? all : [reply, ...all.filter((c) => c !== reply)];
+  }
   const done = () => [...S.cards.values()].filter((c) => c.done !== undefined).sort((a, b) => b.doneAt - a.doneAt);
 
   // ---- What the seller does ----
+  /** The file as it is now, its marks set: what cx wrote to it since it was drawn stays. */
   async function mark(c, how, answer) {
-    const text = marked(c.text, { done: how, at: Date.now(), ...(answer === undefined ? {} : { answer }) });
+    const text = marked(await board.read(c.file), { done: how, at: Date.now(), ...(answer === undefined ? {} : { answer }) });
     const wrote = await board.write(c.file, text);
     S.cards.set(c.file, readCard(c.file, wrote.modified, text));
   }
@@ -175,11 +184,15 @@
   }
   /** A reply is the seller's message to cx about the card: it goes as their message, naming the card, and the card is marked answered. */
   async function answer(c, words) {
+    if (S.busy.has(c.file)) return;
     const at = waiting().indexOf(c);
     S.busy.add(c.file);
+    draw();
     try { await board.send(words, { card: c.file }); }
     catch { S.busy.delete(c.file); S.failed.set(c.file, words); draw(); document.getElementById(idOf(c.file))?.querySelector("input")?.focus(); return; }
     S.failed.delete(c.file);
+    const sent = document.getElementById(idOf(c.file))?.querySelector("input");
+    if (sent) sent.value = "";
     try { await mark(c, "answered", words); } catch { /* sent; the mark is the board's next read */ }
     S.busy.delete(c.file);
     draw(); focusAfter(at); sayIt(W.said.answered());
@@ -197,8 +210,7 @@
     const c = S.cards.get(file);
     S.gone.delete(file);
     if (c !== undefined) {
-      const text = marked(c.text, undefined);
-      try { const wrote = await board.write(file, text); S.cards.set(file, readCard(file, wrote.modified, text)); sayIt(W.said.back()); } catch { /* it stays done */ }
+      try { const text = marked(await board.read(file), undefined); const wrote = await board.write(file, text); S.cards.set(file, readCard(file, wrote.modified, text)); sayIt(W.said.back()); } catch { /* it stays done */ }
     }
     draw();
     document.getElementById(idOf(file))?.focus();
@@ -222,14 +234,16 @@
     const more = h("button", { type: "button", class: "t-quiet t-more", "aria-expanded": String(whole), hidden: !whole, onclick: () => { if (whole) S.whole.delete(c.file); else S.whole.add(c.file); draw(); document.getElementById(id)?.querySelector(".t-more")?.focus(); } }, h("span", {}, whole ? W.less() : W.more()));
     const go = () => { if (field.value.trim() !== "") void answer(c, field.value.trim()); };
     const field = c.asks && h("input", { type: "text", class: "entry-field", dir: "auto", "aria-label": W.replyTo(c.title), placeholder: W.reply(), autocomplete: "off", value: failed ?? "", disabled: busy, "aria-describedby": failed !== undefined ? `${id}-fail` : undefined, onkeydown: (event) => { if (event.key === "Enter" && !event.isComposing) go(); } });
-    return h("li", {}, h("article", { class: "entry t-card", id, tabindex: "-1", "data-file": c.file },
+    // An asking card's × comes after its answer and Send, so Tab meets them first; it is drawn at the card's corner all the same.
+    return h("li", {}, h("article", { class: `entry t-card${c.asks ? " t-asks" : ""}`, id, tabindex: "-1", "data-file": c.file },
       h("div", { class: "t-head" },
         h("h3", { class: `entry-title${whole ? "" : " cut"}`, dir: "auto" }, c.title),
-        c.asks ? markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy) : markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), busy)),
+        !c.asks && markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), busy)),
       h("time", { class: "t-when", datetime: new Date(c.modified).toISOString() }, clock(c.modified)),
       words, more,
       field && h("div", { class: "t-reply" }, field, h("button", { type: "button", class: "primary", disabled: busy, onclick: go }, W.send())),
-      failed !== undefined && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent())));
+      failed !== undefined && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent()),
+      c.asks && markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy)));
   }
   function goneLine(file) {
     const { title } = S.gone.get(file);
@@ -286,7 +300,11 @@
   function draw() {
     // A field the seller is typing in keeps its words and its caret across a draw.
     const typing = document.activeElement?.matches?.(".t-card input") ? { file: document.activeElement.closest(".t-card").dataset.file, value: document.activeElement.value, at: document.activeElement.selectionStart } : undefined;
+    const typed = [...page.querySelectorAll(".t-card input")].filter((field) => field.value !== "").map((field) => [field.closest(".t-card").dataset.file, field.value]);
+    const held = typing === undefined && document.activeElement?.matches?.(".t-card, .t-row") ? document.activeElement.closest("[id]")?.id : undefined;
     page.replaceChildren(...(S.view === "history" ? historyView() : nowView()), status);
+    for (const [file, words] of typed) { const field = document.getElementById(idOf(file))?.querySelector("input"); if (field && field.value === "") field.value = words; }
+    if (held !== undefined) { const back = document.getElementById(held); (back?.matches("li") ? back.querySelector("button") : back)?.focus({ preventScroll: true }); }
     for (const box of page.querySelectorAll(".t-card")) {
       const words = box.querySelector(".t-words"), more = box.querySelector(".t-more"), name = box.querySelector(".entry-title");
       if (words.classList.contains("cut") && (words.scrollHeight > words.clientHeight + 1 || name.scrollHeight > name.clientHeight + 1)) more.hidden = false;
