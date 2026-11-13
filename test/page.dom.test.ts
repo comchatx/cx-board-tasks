@@ -260,3 +260,60 @@ it("keeps the keyboard on the card that had it when the page draws again", async
   await settle();
   expect(document.activeElement).toBe(cardOf("a.md"));
 });
+
+const gate = () => { let release!: () => void; const promise = new Promise<void>((done) => { release = done; }); return { promise, release }; };
+const typeIn = (file: string, words: string): HTMLInputElement => { const field = cardOf(file).querySelector<HTMLInputElement>("input")!; field.value = words; return field; };
+
+it("keeps what the seller typed after a refused send over the words that were refused, when the page draws again", async () => {
+  const made = open({ "a.md": ASK, "b.md": ASK });
+  await settle();
+  made.refuse["send"] = ["no_press"];
+  typeIn("a.md", "Old ten").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  await settle();
+  typeIn("a.md", "New twenty");
+  typeIn("b.md", "B draft").focus();
+  made.tell("context", { width: 1280 });
+  expect(cardOf("a.md").querySelector("input")!.value).toBe("New twenty");
+  expect(cardOf("b.md").querySelector("input")!.value).toBe("B draft");
+});
+
+it("keeps an unsent answer while the seller looks under Done and comes back", async () => {
+  open({ "a.md": ASK });
+  await settle();
+  typeIn("a.md", "Unsent while I read Done");
+  document.querySelector<HTMLButtonElement>(".t-top button")!.click();
+  document.querySelector<HTMLButtonElement>(".t-top button")!.click();
+  expect(cardOf("a.md").querySelector("input")!.value).toBe("Unsent while I read Done");
+});
+
+it("keeps the words the seller selected selected, in their direction, when the page draws again", async () => {
+  const made = open({ "a.md": ASK });
+  await settle();
+  const field = typeIn("a.md", "abcdef");
+  field.focus();
+  field.setSelectionRange(1, 5, "forward");
+  made.tell("context", { width: 1280 });
+  const active = document.activeElement as HTMLInputElement;
+  expect([active.selectionStart, active.selectionEnd, active.selectionDirection]).toEqual([1, 5, "forward"]);
+});
+
+for (const action of ["tick", "dismiss", "undo"] as const) it(`does one ${action} for two presses while the first is on its way, its control held until it is`, async () => {
+  const made = open({ "a.md": action === "tick" ? TELL : ASK });
+  await settle();
+  if (action === "undo") { cardOf("a.md").querySelector<HTMLButtonElement>(".t-mark")!.click(); await settle(); }
+  const read = made.board.read.getMockImplementation()!;
+  const g = gate();
+  made.board.read.mockClear();
+  made.board.read.mockImplementation(async (file) => { await g.promise; return await read(file); });
+  const press = (): HTMLButtonElement => action === "undo" ? document.querySelector<HTMLButtonElement>(".t-gone button")! : cardOf("a.md").querySelector<HTMLButtonElement>(".t-mark")!;
+  const first = press();
+  first.click();
+  expect(press().disabled).toBe(true);
+  first.click();
+  expect(made.board.read).toHaveBeenCalledTimes(1);
+  g.release();
+  await settle();
+  expect(made.board.write).toHaveBeenCalledTimes(action === "undo" ? 2 : 1);
+  if (action === "undo") expect(made.held.get("a.md")!.text).toBe(ASK);
+  else expect(made.held.get("a.md")!.text).toContain(`done: ${action === "tick" ? "read" : "dismissed"}`);
+});

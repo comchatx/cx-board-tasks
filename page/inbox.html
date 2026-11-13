@@ -132,7 +132,7 @@
   }
 
   // ---- What the tab holds ----
-  const S = { cards: new Map(), view: "now", find: "", whole: new Set(), shown: new Set(), weeks: new Set(), gone: new Map(), failed: new Map(), busy: new Set() };
+  const S = { cards: new Map(), view: "now", find: "", whole: new Set(), shown: new Set(), weeks: new Set(), gone: new Map(), failed: new Set(), busy: new Set(), fields: new Map() };
   let reading = false, again = false;
   const pause = (ms) => new Promise((done) => setTimeout(done, ms));
   /**
@@ -145,7 +145,7 @@
     try {
       const listed = (await board.list()).filter((one) => /\.md$/i.test(one.file));
       const now = new Set(listed.map((one) => one.file));
-      for (const file of [...S.cards.keys()]) if (!now.has(file)) S.cards.delete(file);
+      for (const file of [...S.cards.keys()]) if (!now.has(file)) { S.cards.delete(file); S.fields.delete(file); }
       const stale = listed.filter((one) => S.cards.get(one.file)?.modified !== one.modified)
         .sort((a, b) => Number(/^done\//.test(a.file)) - Number(/^done\//.test(b.file)) || b.modified - a.modified);
       for (let at = 0; at < stale.length;) {
@@ -176,8 +176,10 @@
     S.cards.set(c.file, readCard(c.file, wrote.modified, text));
   }
   async function tick(c) {
+    if (S.busy.has(c.file)) return;
     const at = waiting().indexOf(c);
     S.busy.add(c.file);
+    draw();
     try { await mark(c, "read"); sayIt(W.said.read()); } catch { /* the card stands as it was */ }
     S.busy.delete(c.file);
     draw(); focusAfter(at);
@@ -189,29 +191,34 @@
     S.busy.add(c.file);
     draw();
     try { await board.send(words, { card: c.file }); }
-    catch { S.busy.delete(c.file); S.failed.set(c.file, words); draw(); document.getElementById(idOf(c.file))?.querySelector("input")?.focus(); return; }
+    catch { S.busy.delete(c.file); S.failed.add(c.file); draw(); S.fields.get(c.file)?.focus(); return; }
     S.failed.delete(c.file);
-    const sent = document.getElementById(idOf(c.file))?.querySelector("input");
-    if (sent) sent.value = "";
+    S.fields.delete(c.file);
     try { await mark(c, "answered", words); } catch { /* sent; the mark is the board's next read */ }
     S.busy.delete(c.file);
     draw(); focusAfter(at); sayIt(W.said.answered());
   }
   /** Dismissed, a card leaves and nothing is sent. A line stands where it stood until the list is next drawn anew, and takes it back. */
   async function dismiss(c) {
+    if (S.busy.has(c.file)) return;
     const at = waiting().indexOf(c);
     S.busy.add(c.file);
+    draw();
     try { await mark(c, "dismissed"); S.gone.set(c.file, { title: c.title, at }); sayIt(W.said.dismissed()); } catch { /* the card stands */ }
     S.busy.delete(c.file);
     draw();
     document.querySelector(`[data-for="${CSS.escape(c.file)}"] button`)?.focus();
   }
   async function undo(file) {
+    if (S.busy.has(file)) return;
     const c = S.cards.get(file);
-    S.gone.delete(file);
+    S.busy.add(file);
+    draw();
     if (c !== undefined) {
       try { const text = marked(await board.read(file), undefined); const wrote = await board.write(file, text); S.cards.set(file, readCard(file, wrote.modified, text)); sayIt(W.said.back()); } catch { /* it stays done */ }
     }
+    S.gone.delete(file);
+    S.busy.delete(file);
     draw();
     document.getElementById(idOf(file))?.focus();
   }
@@ -229,11 +236,11 @@
   const quiet = (glyph, words, press) => h("button", { type: "button", class: "t-quiet", onclick: press }, glyph && icon(...GLYPH[glyph]), h("span", {}, words));
   function card(c) {
     const whole = S.whole.has(c.file), busy = S.busy.has(c.file), id = idOf(c.file);
-    const failed = S.failed.get(c.file);
+    const failed = S.failed.has(c.file);
     const words = h("div", { class: `t-words entry-body${whole ? "" : " cut"}`, dir: "auto" }, c.words.map((line) => h("p", {}, line)));
     const more = h("button", { type: "button", class: "t-quiet t-more", "aria-expanded": String(whole), hidden: !whole, onclick: () => { if (whole) S.whole.delete(c.file); else S.whole.add(c.file); draw(); document.getElementById(id)?.querySelector(".t-more")?.focus(); } }, h("span", {}, whole ? W.less() : W.more()));
-    const go = () => { if (field.value.trim() !== "") void answer(c, field.value.trim()); };
-    const field = c.asks && h("input", { type: "text", class: "entry-field", dir: "auto", "aria-label": W.replyTo(c.title), placeholder: W.reply(), autocomplete: "off", value: failed ?? "", disabled: busy, "aria-describedby": failed !== undefined ? `${id}-fail` : undefined, onkeydown: (event) => { if (event.key === "Enter" && !event.isComposing) go(); } });
+    const field = c.asks && fieldOf(c.file);
+    if (field) { field.disabled = busy; field.setAttribute("aria-label", W.replyTo(c.title)); if (failed) field.setAttribute("aria-describedby", `${id}-fail`); else field.removeAttribute("aria-describedby"); }
     // An asking card's × comes after its answer and Send, so Tab meets them first; it is drawn at the card's corner all the same.
     return h("li", {}, h("article", { class: `entry t-card${c.asks ? " t-asks" : ""}`, id, tabindex: "-1", "data-file": c.file },
       h("div", { class: "t-head" },
@@ -241,13 +248,16 @@
         !c.asks && markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), busy)),
       h("time", { class: "t-when", datetime: new Date(c.modified).toISOString() }, clock(c.modified)),
       words, more,
-      field && h("div", { class: "t-reply" }, field, h("button", { type: "button", class: "primary", disabled: busy, onclick: go }, W.send())),
-      failed !== undefined && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent()),
+      field && h("div", { class: "t-reply" }, field, h("button", { type: "button", class: "primary", disabled: busy, onclick: () => sendFrom(c.file) }, W.send())),
+      failed && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent()),
       c.asks && markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy)));
   }
+  /** A card's field is one element for as long as the page lives, so the browser keeps its words, caret and selection across a draw. */
+  const fieldOf = (file) => S.fields.get(file) ?? S.fields.set(file, h("input", { type: "text", class: "entry-field", dir: "auto", placeholder: W.reply(), autocomplete: "off", onkeydown: (event) => { if (event.key === "Enter" && !event.isComposing) sendFrom(file); } })).get(file);
+  const sendFrom = (file) => { const c = S.cards.get(file), words = S.fields.get(file)?.value.trim(); if (c !== undefined && words) void answer(c, words); };
   function goneLine(file) {
     const { title } = S.gone.get(file);
-    return h("li", { "data-for": file }, h("p", { class: "t-gone" }, h("span", { dir: "auto" }, W.gone(title)), h("button", { type: "button", class: "t-quiet", onclick: () => void undo(file) }, h("span", {}, W.undo()))));
+    return h("li", { "data-for": file }, h("p", { class: "t-gone" }, h("span", { dir: "auto" }, W.gone(title)), h("button", { type: "button", class: "t-quiet", disabled: S.busy.has(file), onclick: () => void undo(file) }, h("span", {}, W.undo()))));
   }
   const top = (...inside) => h("div", { class: "t-top" }, ...inside);
   function nowView() {
@@ -298,18 +308,15 @@
   }
   let counted;
   function draw() {
-    // A field the seller is typing in keeps its words and its caret across a draw.
-    const typing = document.activeElement?.matches?.(".t-card input") ? { file: document.activeElement.closest(".t-card").dataset.file, value: document.activeElement.value, at: document.activeElement.selectionStart } : undefined;
-    const typed = [...page.querySelectorAll(".t-card input")].filter((field) => field.value !== "").map((field) => [field.closest(".t-card").dataset.file, field.value]);
+    const typing = document.activeElement?.matches?.(".t-card input") ? document.activeElement : undefined;
     const held = typing === undefined && document.activeElement?.matches?.(".t-card, .t-row") ? document.activeElement.closest("[id]")?.id : undefined;
     page.replaceChildren(...(S.view === "history" ? historyView() : nowView()), status);
-    for (const [file, words] of typed) { const field = document.getElementById(idOf(file))?.querySelector("input"); if (field && field.value === "") field.value = words; }
     if (held !== undefined) { const back = document.getElementById(held); (back?.matches("li") ? back.querySelector("button") : back)?.focus({ preventScroll: true }); }
     for (const box of page.querySelectorAll(".t-card")) {
       const words = box.querySelector(".t-words"), more = box.querySelector(".t-more"), name = box.querySelector(".entry-title");
       if (words.classList.contains("cut") && (words.scrollHeight > words.clientHeight + 1 || name.scrollHeight > name.clientHeight + 1)) more.hidden = false;
     }
-    if (typing !== undefined) { const field = document.getElementById(idOf(typing.file))?.querySelector("input"); if (field) { field.value = typing.value; field.focus(); field.setSelectionRange(typing.at, typing.at); } }
+    if (typing?.isConnected) typing.focus({ preventScroll: true });
     const list = waiting();
     const asks = list.filter((c) => c.asks).length, tells = list.length - asks;
     const words = W.count(asks, tells);
