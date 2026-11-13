@@ -1,0 +1,321 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Inbox</title>
+<!--
+  The Inbox: the page the board draws in the tab `待办` while this package is installed. It is the signed prototype's page
+  (`spikes/board/pages/tasks.html` in comchatx, signed 2026-11-11) on the board's own asks (`window.cxBoard`) and elements (`Kit`).
+  A card is a Markdown file anywhere in the tab: `title` (or its first heading), cx's words, and `asks: true` where it asks. Where it
+  stands is written into its own front matter (`done`, `doneAt`, `answer`), as the base reads any board's card.
+-->
+<style>
+  #page { max-width: 40rem; margin: 0 auto; }
+  .unseen { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+  .t-list { display: flex; flex-direction: column; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
+  .t-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: var(--space-7); margin-bottom: var(--space-4); }
+  .t-top > .entry-field { flex: 1 1 auto; min-width: 0; }
+  .t-quiet { flex: none; display: inline-flex; align-items: center; gap: var(--space-2); min-height: var(--space-7); padding: 0; border: none; background: none; color: var(--quiet); font-size: var(--size-small); line-height: var(--leading-small); }
+  .t-quiet:hover:not(:disabled) { background: none; color: var(--ink); text-decoration: underline; }
+  .t-quiet[hidden] { display: none; }
+  .t-head { display: flex; align-items: flex-start; gap: var(--space-4); }
+  .t-head > .entry-title { flex: 1 1 auto; min-width: 0; margin: 0; font-weight: var(--weight-strong); overflow-wrap: anywhere; }
+  .t-head > .entry-title.cut { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+  .t-mark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--space-7); height: var(--space-7); margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 0; padding: 0; border: none; border-radius: var(--radius-round); background: none; color: var(--quiet); }
+  .t-mark:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+  .t-when { color: var(--quiet); font-size: var(--size-caption); line-height: var(--leading-small); }
+  .entry.t-card > .t-when { margin-top: var(--space-1); }
+  .t-words > p { margin: 0; overflow-wrap: anywhere; }
+  .t-words > p + p { margin-top: var(--space-3); }
+  .t-words.cut { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+  .t-words.cut > p { display: inline; }
+  .t-words.cut > p + p::before { content: " "; }
+  .entry.t-card > .t-more { margin-top: 0; }
+  .t-reply { display: flex; align-items: center; gap: var(--space-4); }
+  .t-reply > .entry-field { flex: 1 1 auto; min-width: 0; }
+  .t-reply > button { flex: none; }
+  .t-gone { display: flex; align-items: baseline; gap: var(--space-4); margin: 0; padding: 0 var(--space-5); color: var(--quiet); font-size: var(--size-small); line-height: var(--leading-small); }
+  .t-gone > span { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .t-fail { margin: 0; color: var(--bad); font-size: var(--size-small); line-height: var(--leading-small); }
+  .t-row { display: flex; flex-direction: column; gap: var(--space-1); width: 100%; padding: var(--space-3) 0; border: none; border-bottom: 1px solid var(--line); border-radius: 0; background: none; text-align: start; }
+  .t-row:hover:not(:disabled) { background: none; }
+  .t-row:hover > .entry-title { text-decoration: underline; }
+  .t-row > .entry-title { font-weight: var(--weight-regular); overflow-wrap: anywhere; }
+  .t-row[aria-expanded="false"] > .entry-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .t-past { padding: var(--space-3) 0 var(--space-4); border-bottom: 1px solid var(--line); font-size: var(--size-small); line-height: var(--leading-small); }
+  .t-past > * { margin: 0; }
+  .t-past > * + * { margin-top: var(--space-3); }
+  .t-past > .t-yours { color: var(--quiet); }
+  .t-week { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); width: 100%; padding: var(--space-3) 0; border: none; border-bottom: 1px solid var(--line); border-radius: 0; background: none; text-align: start; }
+  .t-week:hover:not(:disabled) { background: none; text-decoration: underline; }
+  .t-week > span:last-child { color: var(--quiet); }
+  .t-rows { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+</style>
+</head>
+<body class="kit">
+<div class="kit-page" id="page"></div>
+<script>
+(() => {
+  "use strict";
+  const { h, icon } = Kit;
+  const board = window.cxBoard;
+  const page = document.getElementById("page");
+  const zh = () => Kit.lang === "zh";
+  const w = (en, cn) => (zh() ? cn : en);
+  const named = (verb, title) => w(`${verb} “${title}”`, `${verb}“${title}”`);
+  const GLYPH = {
+    out: ["M6.5 6.5l11 11", "M17.5 6.5l-11 11"], tick: ["M5 12.5l4.5 4.5L19 7.5"], past: ["M12 4a8 8 0 1 0 0 16a8 8 0 0 0 0-16z", "M12 8v4.5l3 1.5"],
+    back: ["M14.5 6l-6 6l6 6"],
+  };
+  // The signed words (comchatx `spikes/board/README.md`, rows 2 to 17 and 25 to 44, signed 2026-11-11). Another package's questions
+  // (rows 18 to 24) are not this package's.
+  const W = {
+    history: () => w("Done", "已处理"), back: () => w("Back", "返回"), search: () => w("Search", "搜索"),
+    reply: () => w("Answer cx", "回答 cx"), replyTo: (title) => named(w("Answer", "回答"), title), send: () => w("Send", "发送"),
+    dismiss: () => w("Dismiss", "忽略"), dismissIt: (title) => named(w("Dismiss", "忽略"), title),
+    tick: () => w("Mark as read", "已读"), tickIt: (title) => named(w("Mark as read", "标为已读"), title),
+    undo: () => w("Undo", "撤销"), gone: (title) => named(w("Dismissed", "已忽略"), title),
+    how: { answered: () => w("Answered", "已回答"), read: () => w("Read", "已读"), dismissed: () => w("Dismissed", "已忽略") },
+    at: (how, when) => w(`${how} · ${when}`, `${when} ${how}`),
+    more: () => w("Show", "展开"), less: () => w("Show less", "收起"),
+    none: () => w("Nothing to do", "暂无待处理"), noneYet: () => w("What cx leaves for you will be here.", "cx 留给你的内容会放在这里。"),
+    noneDone: () => w("Nothing done yet", "暂无已处理"), notFound: () => w("No title has these words.", "标题里没有这些字。"),
+    items: (n) => w(`${n}`, `${n} 条`), you: () => w("You", "你"),
+    unsent: () => w("Your answer was not sent.", "回答没有发出去。"),
+    said: { read: () => w("Marked as read", "已标为已读"), dismissed: () => w("Dismissed", "已忽略"), answered: () => w("Sent to cx", "已交给 cx"), back: () => w("Back on the list", "已恢复") },
+    count: (asks, tells) => [asks > 0 && w(`${asks} to answer`, `${asks} 条待作答`), tells > 0 && w(`${tells} to read`, `${tells} 条待查看`)].filter(Boolean).join(w(", ", "，")),
+  };
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const two = (n) => String(n).padStart(2, "0");
+  const day = (at) => { const d = new Date(at); return zh() ? `${d.getMonth() + 1} 月 ${d.getDate()} 日` : `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
+  const clock = (at) => { const d = new Date(at); return zh() ? `${day(at)} ${two(d.getHours())}:${two(d.getMinutes())}` : `${day(at)}, ${two(d.getHours())}:${two(d.getMinutes())}`; };
+
+  // ---- A card, read from its file ----
+  const ASKING = new Set(["proposal", "choice", "input"]);
+  const DONE = new Set(["read", "answered", "dismissed"]);
+  /** A front-matter value: a JSON-quoted string as written, a single-quoted one, or the bare text. */
+  function value(raw) {
+    const text = raw.trim();
+    if (text.startsWith('"')) { try { const one = JSON.parse(text); if (typeof one === "string") return one; } catch { /* the bare text */ } }
+    if (text.length > 1 && text.startsWith("'") && text.endsWith("'")) return text.slice(1, -1).replace(/''/g, "'");
+    return text;
+  }
+  /** A file's front matter, its lines and keys, and the words after it; none where it opens with none. */
+  function front(text) {
+    const found = /^﻿?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(text);
+    if (found === null) return { lines: undefined, keys: new Map(), body: text.replace(/^﻿/, "") };
+    const lines = found[1].split(/\r?\n/);
+    const keys = new Map();
+    for (const line of lines) { const one = /^([A-Za-z][\w-]*):(.*)$/.exec(line); if (one !== null) keys.set(one[1], value(one[2])); }
+    return { lines, keys, body: text.slice(found[0].length) };
+  }
+  function readCard(file, modified, text) {
+    const { keys, body } = front(text);
+    const heading = /^[ \t]*#{1,6}[ \t]+(.+?)[ \t#]*$/m.exec(body);
+    const title = (keys.get("title") || (heading ? heading[1] : "") || file.split("/").pop().replace(/\.md$/i, "")).replace(/\s+/g, " ").trim();
+    const words = (keys.get("title") || heading === null ? body : body.slice(0, heading.index) + body.slice(heading.index + heading[0].length))
+      .split(/\r?\n[ \t]*\r?\n/).map((one) => one.replace(/\s+/g, " ").trim()).filter((one) => one !== "");
+    const done = DONE.has(keys.get("done")) ? keys.get("done") : undefined;
+    const at = Date.parse(keys.get("doneAt") ?? "");
+    return { file, modified, text, title, words, asks: keys.get("asks") === "true" || ASKING.has(keys.get("kind")), done, doneAt: Number.isFinite(at) ? at : modified, answer: keys.get("answer") };
+  }
+  /** The file with its marks set, every other line and byte as it was; `undefined` takes them out. */
+  function marked(text, mark) {
+    const { lines, body } = front(text);
+    const kept = (lines ?? []).filter((line) => !/^(done|doneAt|answer):/.test(line));
+    const added = mark === undefined ? [] : [`done: ${mark.done}`, `doneAt: ${new Date(mark.at).toISOString()}`, ...(mark.answer === undefined ? [] : [`answer: ${JSON.stringify(mark.answer)}`])];
+    const all = [...kept, ...added];
+    return all.length === 0 ? body : `---\n${all.join("\n")}\n---\n${body}`;
+  }
+
+  // ---- What the tab holds ----
+  const S = { cards: new Map(), view: "now", find: "", whole: new Set(), shown: new Set(), weeks: new Set(), gone: new Map(), failed: new Map(), busy: new Set() };
+  let reading = false, again = false;
+  const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+  /**
+   * The tab read again: its list, then each Markdown file not read at the time the list gives it, waiting ones first. The board takes a
+   * page's asks in a bucket of 32 and ten a second; a first open of a tab of more than 32 cards meets its refusal, and waits a second.
+   */
+  async function load() {
+    if (reading) { again = true; return; }
+    reading = true;
+    try {
+      const listed = (await board.list()).filter((one) => /\.md$/i.test(one.file));
+      const now = new Set(listed.map((one) => one.file));
+      for (const file of [...S.cards.keys()]) if (!now.has(file)) S.cards.delete(file);
+      const stale = listed.filter((one) => S.cards.get(one.file)?.modified !== one.modified)
+        .sort((a, b) => Number(/^done\//.test(a.file)) - Number(/^done\//.test(b.file)) || b.modified - a.modified);
+      for (let at = 0; at < stale.length;) {
+        const one = stale[at];
+        try { S.cards.set(one.file, readCard(one.file, one.modified, await board.read(one.file))); at += 1; }
+        catch (error) { if (error?.message === "too_often") { draw(); await pause(1000); } else at += 1; }
+      }
+    } catch { /* the board said no: what was read stands */ }
+    reading = false;
+    draw();
+    if (wanted !== undefined) bring();
+    if (again) { again = false; void load(); }
+  }
+
+  const waiting = () => [...S.cards.values()].filter((c) => c.done === undefined).sort((a, b) => Number(b.asks) - Number(a.asks) || b.modified - a.modified);
+  const done = () => [...S.cards.values()].filter((c) => c.done !== undefined).sort((a, b) => b.doneAt - a.doneAt);
+
+  // ---- What the seller does ----
+  async function mark(c, how, answer) {
+    const text = marked(c.text, { done: how, at: Date.now(), ...(answer === undefined ? {} : { answer }) });
+    const wrote = await board.write(c.file, text);
+    S.cards.set(c.file, readCard(c.file, wrote.modified, text));
+  }
+  async function tick(c) {
+    const at = waiting().indexOf(c);
+    S.busy.add(c.file);
+    try { await mark(c, "read"); sayIt(W.said.read()); } catch { /* the card stands as it was */ }
+    S.busy.delete(c.file);
+    draw(); focusAfter(at);
+  }
+  /** A reply is the seller's message to cx about the card: it goes as their message, naming the card, and the card is marked answered. */
+  async function answer(c, words) {
+    const at = waiting().indexOf(c);
+    S.busy.add(c.file);
+    try { await board.send(words, { card: c.file }); }
+    catch { S.busy.delete(c.file); S.failed.set(c.file, words); draw(); document.getElementById(idOf(c.file))?.querySelector("input")?.focus(); return; }
+    S.failed.delete(c.file);
+    try { await mark(c, "answered", words); } catch { /* sent; the mark is the board's next read */ }
+    S.busy.delete(c.file);
+    draw(); focusAfter(at); sayIt(W.said.answered());
+  }
+  /** Dismissed, a card leaves and nothing is sent. A line stands where it stood until the list is next drawn anew, and takes it back. */
+  async function dismiss(c) {
+    const at = waiting().indexOf(c);
+    S.busy.add(c.file);
+    try { await mark(c, "dismissed"); S.gone.set(c.file, { title: c.title, at }); sayIt(W.said.dismissed()); } catch { /* the card stands */ }
+    S.busy.delete(c.file);
+    draw();
+    document.querySelector(`[data-for="${CSS.escape(c.file)}"] button`)?.focus();
+  }
+  async function undo(file) {
+    const c = S.cards.get(file);
+    S.gone.delete(file);
+    if (c !== undefined) {
+      const text = marked(c.text, undefined);
+      try { const wrote = await board.write(file, text); S.cards.set(file, readCard(file, wrote.modified, text)); sayIt(W.said.back()); } catch { /* it stays done */ }
+    }
+    draw();
+    document.getElementById(idOf(file))?.focus();
+  }
+
+  // ---- Drawing ----
+  const idOf = (file) => `c-${[...new TextEncoder().encode(file)].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+  const status = h("p", { class: "unseen", role: "status" });
+  const sayIt = (words) => { status.textContent = ""; setTimeout(() => { status.textContent = words; }, 50); };
+  function focusAfter(at) {
+    const list = waiting();
+    const to = list[Math.min(at, list.length - 1)];
+    (to ? document.getElementById(idOf(to.file)) : document.querySelector(".t-top button:last-child"))?.focus();
+  }
+  const markPress = (glyph, word, name, press, off) => h("button", { type: "button", class: "t-mark", title: word, "aria-label": name, disabled: off, onclick: press }, icon(...GLYPH[glyph]));
+  const quiet = (glyph, words, press) => h("button", { type: "button", class: "t-quiet", onclick: press }, glyph && icon(...GLYPH[glyph]), h("span", {}, words));
+  function card(c) {
+    const whole = S.whole.has(c.file), busy = S.busy.has(c.file), id = idOf(c.file);
+    const failed = S.failed.get(c.file);
+    const words = h("div", { class: `t-words entry-body${whole ? "" : " cut"}`, dir: "auto" }, c.words.map((line) => h("p", {}, line)));
+    const more = h("button", { type: "button", class: "t-quiet t-more", "aria-expanded": String(whole), hidden: !whole, onclick: () => { if (whole) S.whole.delete(c.file); else S.whole.add(c.file); draw(); document.getElementById(id)?.querySelector(".t-more")?.focus(); } }, h("span", {}, whole ? W.less() : W.more()));
+    const go = () => { if (field.value.trim() !== "") void answer(c, field.value.trim()); };
+    const field = c.asks && h("input", { type: "text", class: "entry-field", dir: "auto", "aria-label": W.replyTo(c.title), placeholder: W.reply(), autocomplete: "off", value: failed ?? "", disabled: busy, "aria-describedby": failed !== undefined ? `${id}-fail` : undefined, onkeydown: (event) => { if (event.key === "Enter" && !event.isComposing) go(); } });
+    return h("li", {}, h("article", { class: "entry t-card", id, tabindex: "-1", "data-file": c.file },
+      h("div", { class: "t-head" },
+        h("h3", { class: `entry-title${whole ? "" : " cut"}`, dir: "auto" }, c.title),
+        c.asks ? markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy) : markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), busy)),
+      h("time", { class: "t-when", datetime: new Date(c.modified).toISOString() }, clock(c.modified)),
+      words, more,
+      field && h("div", { class: "t-reply" }, field, h("button", { type: "button", class: "primary", disabled: busy, onclick: go }, W.send())),
+      failed !== undefined && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent())));
+  }
+  function goneLine(file) {
+    const { title } = S.gone.get(file);
+    return h("li", { "data-for": file }, h("p", { class: "t-gone" }, h("span", { dir: "auto" }, W.gone(title)), h("button", { type: "button", class: "t-quiet", onclick: () => void undo(file) }, h("span", {}, W.undo()))));
+  }
+  const top = (...inside) => h("div", { class: "t-top" }, ...inside);
+  function nowView() {
+    const out = [top(h("span", {}), quiet("past", W.history(), () => { S.view = "history"; S.gone.clear(); draw(); document.querySelector(".t-top button")?.focus(); }))];
+    const list = waiting();
+    const rows = [];
+    const lines = [...S.gone.entries()].sort((a, b) => a[1].at - b[1].at);
+    list.forEach((c, k) => { while (lines.length > 0 && lines[0][1].at <= k) rows.push(goneLine(lines.shift()[0])); rows.push(card(c)); });
+    for (const [file] of lines) rows.push(goneLine(file));
+    if (rows.length === 0) out.push(h("p", { class: "board-empty" }, S.cards.size > 0 ? W.none() : W.noneYet()));
+    else out.push(h("ul", { class: "t-list" }, rows));
+    return out;
+  }
+  function pastRow(c) {
+    const open = S.shown.has(c.file), id = idOf(c.file);
+    return h("li", { id },
+      h("button", { type: "button", class: "t-row", "aria-expanded": String(open), onclick: () => { if (open) S.shown.delete(c.file); else S.shown.add(c.file); draw(); document.getElementById(id)?.querySelector("button")?.focus(); } },
+        h("span", { class: "entry-title", dir: "auto" }, c.title), h("span", { class: "t-when" }, W.at(W.how[c.done](), day(c.doneAt)))),
+      open && h("div", { class: "t-past" }, c.words.map((line) => h("p", { dir: "auto" }, line)), c.done === "answered" && c.answer && h("p", { class: "t-yours", dir: "auto" }, `${W.you()}${w(": ", "：")}${c.answer}`)));
+  }
+  const DAY = 24 * 60 * 60 * 1000;
+  const midnight = () => { const today = new Date(); today.setHours(0, 0, 0, 0); return today.getTime(); };
+  /** How many days ago a card was done, and the folded week it falls in past the last seven days. */
+  const agoOf = (c) => Math.floor((midnight() - new Date(c.doneAt).setHours(0, 0, 0, 0)) / DAY);
+  const weekOf = (c) => Math.floor((agoOf(c) - 8) / 7);
+  function historyView() {
+    const field = h("input", { type: "search", class: "entry-field", "aria-label": W.search(), placeholder: W.search(), autocomplete: "off", value: S.find, oninput: () => { S.find = field.value; draw(); const again = document.querySelector("input[type=search]"); again?.focus(); again?.setSelectionRange(S.find.length, S.find.length); } });
+    const out = [top(quiet("back", W.back(), () => { S.view = "now"; S.find = ""; draw(); document.querySelector(".t-top button:last-child")?.focus(); }), field)];
+    const find = S.find.trim().toLowerCase();
+    const all = done();
+    const found = find ? all.filter((c) => c.title.toLowerCase().includes(find)) : all;
+    if (found.length === 0) { out.push(h("p", { class: "board-empty" }, find ? W.notFound() : W.noneDone())); return out; }
+    const today = midnight();
+    const recent = find ? found : found.filter((c) => agoOf(c) <= 7);
+    if (recent.length > 0) out.push(h("ul", { class: "t-rows" }, recent.map(pastRow)));
+    if (!find) {
+      const older = found.filter((c) => agoOf(c) > 7);
+      for (const k of [...new Set(older.map(weekOf))]) {
+        const mine = older.filter((c) => weekOf(c) === k);
+        const open = S.weeks.has(k);
+        const from = today - (14 + 7 * k) * DAY, to = today - (8 + 7 * k) * DAY;
+        out.push(h("button", { type: "button", class: "t-week", id: `w${k}`, "aria-expanded": String(open), onclick: () => { if (open) S.weeks.delete(k); else S.weeks.add(k); draw(); document.getElementById(`w${k}`)?.focus(); } },
+          h("span", {}, `${day(from)}–${day(to)}`), h("span", {}, W.items(mine.length))));
+        if (open) out.push(h("ul", { class: "t-rows" }, mine.map(pastRow)));
+      }
+    }
+    return out;
+  }
+  let counted;
+  function draw() {
+    // A field the seller is typing in keeps its words and its caret across a draw.
+    const typing = document.activeElement?.matches?.(".t-card input") ? { file: document.activeElement.closest(".t-card").dataset.file, value: document.activeElement.value, at: document.activeElement.selectionStart } : undefined;
+    page.replaceChildren(...(S.view === "history" ? historyView() : nowView()), status);
+    for (const box of page.querySelectorAll(".t-card")) {
+      const words = box.querySelector(".t-words"), more = box.querySelector(".t-more"), name = box.querySelector(".entry-title");
+      if (words.classList.contains("cut") && (words.scrollHeight > words.clientHeight + 1 || name.scrollHeight > name.clientHeight + 1)) more.hidden = false;
+    }
+    if (typing !== undefined) { const field = document.getElementById(idOf(typing.file))?.querySelector("input"); if (field) { field.value = typing.value; field.focus(); field.setSelectionRange(typing.at, typing.at); } }
+    const list = waiting();
+    const asks = list.filter((c) => c.asks).length, tells = list.length - asks;
+    const words = W.count(asks, tells);
+    if (counted !== `${asks + tells} ${words}`) { counted = `${asks + tells} ${words}`; void board.count(asks + tells, words || null).catch(() => {}); }
+  }
+
+  board.on("files", () => void load());
+  board.on("context", () => draw());
+  // The board asks for a card once the page is shown, which may be before its first read: the card is brought into view once it is read.
+  let wanted;
+  board.on("focus", (file) => { wanted = file; bring(); });
+  function bring() {
+    const file = wanted, c = S.cards.get(file);
+    if (c === undefined) return;
+    wanted = undefined;
+    if (c.done !== undefined) { S.view = "history"; S.find = ""; S.shown.add(file); if (agoOf(c) > 7) S.weeks.add(weekOf(c)); } else S.view = "now";
+    draw();
+    const to = document.getElementById(idOf(file));
+    to?.scrollIntoView({ block: "start" });
+    (to?.matches("li") ? to.querySelector("button") : to)?.focus({ preventScroll: true });
+  }
+  draw();
+  void load();
+})();
+</script>
+</body>
+</html>

@@ -1,13 +1,13 @@
 ---
 name: cx-board-tasks
-description: The seller's Inbox (收件箱 / Inbox), a tab of the seller's board where cards ask the seller something or tell them something, and the seller answers, ticks or dismisses each one later. Use when you leave the seller something to decide or to read on the board, and when the seller's message answers a card.
+description: The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as read or answers. Use when you leave the seller something to decide or to read on the board, and when the seller's message answers a card.
 ---
 
 The Inbox is a tab of the board the `cx-board` skill describes: the directory `待办` under the board, which the seller sees named 收件箱 / Inbox.
 
 ## A card
 
-A card is a Markdown file anywhere under `待办/`, named as the `cx-board` skill says. It opens with front matter, then your words for the seller, drawn as your answers in the chat are:
+A card is a Markdown file anywhere under `待办/`, named as the `cx-board` skill says. It opens with front matter, then your words for the seller, drawn as plain paragraphs:
 
 ```markdown
 ---
@@ -19,10 +19,14 @@ Your words.
 ```
 
 - `title` is the one line the seller reads first. Without it, the card's first heading is its title.
-- `asks: true` makes the card one that asks: the seller answers it in a field on the card, in their own words. A card without it tells, and the seller ticks it 已读 / Read.
+- `asks: true` makes the card one that asks: the seller answers it in a field on the card, in their own words. A card without it tells, and the seller ticks it 已读 / Mark as read.
 - The seller may dismiss any card, 忽略 / Dismiss.
 - The seller reads each card on its own, in the Inbox, newest first.
 - A card does not hold your turn. You go on, and the seller answers when they come to it.
+
+## The page's names
+
+Call the Inbox's parts by the names the seller sees, in the seller's language: 收件箱 / Inbox, 已处理 / Done, 已读 / Mark as read, 忽略 / Dismiss.
 
 ## Where a card stands
 

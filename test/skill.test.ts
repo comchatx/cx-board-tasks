@@ -6,15 +6,20 @@ import { expect, it } from "vitest";
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const skill = readFileSync(join(ROOT, "skills", "cx-board-tasks", "SKILL.md"), "utf8");
 
-it("tells cx of the module's kinds, places and answers, and that a question which must wait can be an entry answered in the chat", () => {
-  for (const kind of ["`finding`", "`change`", "`proposal`", "`choice`", "`input`"]) expect(skill, kind).toContain(kind);
-  for (const said of ["忽略 / Dismiss", "交给 cx / Send to cx", "<board file=", "`answered`"]) expect(skill, said).toContain(said);
-  expect(skill).toContain("A question that has to wait for the seller's answer can be written as a `choice` or an `input` entry on the board: you end your turn and go on, and the answer comes back to you as a message in the chat.");
-  for (const gone of ["timed_out", "prefer the board"]) expect(skill, gone).not.toContain(gone);
+it("tells cx what a card is and where it stands, the keys the base reads for any board's card", () => {
+  for (const said of ["the directory `待办` under the board, which the seller sees named 收件箱 / Inbox", "A card is a Markdown file anywhere under `待办/`", "`asks: true` makes the card one that asks", "`done: read`, `done: answered` or `done: dismissed`", "`doneAt`", "`answer`", "A card does not hold your turn."]) expect(skill, said).toContain(said);
 });
 
-it("keeps a question cx can ask now in the turn, owns the places and marks, leaves the column opening by itself to the base, and keeps todo/ the seller's", () => {
-  expect(skill).toContain("A question you can ask now, ask in your turn");
-  for (const said of ["a tab of its own: the directory `待办` under the board", "`待办/todo/` for what waits for the seller and `待办/done/`", "a file in any other tab is a card and nothing more", "已读 / Mark as read", "It is not your own list of steps", "Nothing under `todo/` or `done/` is deleted."]) expect(skill, said).toContain(said);
-  expect(skill).not.toContain("by itself");
+it("tells cx how an answer comes back: the seller's words, then the line naming the card", () => {
+  expect(skill).toContain('<board from="待办" card="restock-blue-kettle.md"></board>');
+  expect(skill).toContain("A message sent while you are working waits until your turn ends.");
+});
+
+it("gives the page's names as signed, and the skill's row as signed, its first sentence", () => {
+  expect(skill).toContain("收件箱 / Inbox, 已处理 / Done, 已读 / Mark as read, 忽略 / Dismiss");
+  expect(skill).toContain("description: The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as read or answers. ");
+});
+
+it("states facts and no procedure: no step tells cx when to write a card, and nothing of 0.2's places and Send to cx is left", () => {
+  for (const gone of ["交给 cx", "Send to cx", "you should", "always ", "must ", "`choice` or an `input` entry"]) expect(skill, gone).not.toContain(gone);
 });
