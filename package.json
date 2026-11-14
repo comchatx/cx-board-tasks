@@ -1,7 +1,7 @@
 {
   "name": "@comchatx/cx-board-tasks",
-  "version": "0.2.2",
-  "description": "Lists what needs your decision, and sends cx every answer.",
+  "version": "0.3.0",
+  "description": "Puts what cx found and what needs your answer in your Inbox.",
   "license": "MIT",
   "author": "ComChatX",
   "homepage": "https://github.com/comchatx/cx-board-tasks#readme",
@@ -21,6 +21,7 @@
   },
   "files": [
     "skills",
+    "page",
     "README.zh-CN.md"
   ],
   "scripts": {
@@ -28,28 +29,45 @@
     "test": "vitest run"
   },
   "comchatx": {
-    "name": "Board To-dos",
-    "about": "要你决定的事列进待办，答完一次交给 cx。",
+    "name": "Board Inbox",
+    "about": "cx 的发现和要你决定的事放进收件箱，在那里直接回答。",
     "mark": {
       "line": "clipboard"
     },
     "section": "extensions",
     "order": 111,
+    "board": {
+      "tab": "待办",
+      "page": "page/inbox.html",
+      "name": {
+        "zh": "收件箱",
+        "en": "Inbox"
+      }
+    },
     "skills": {
       "cx-board-tasks": {
         "about": {
-          "en": "Tells cx what a to-do holds and how your answers come back.",
-          "zh": "告诉 cx 待办写什么、你的答复如何传回。"
+          "en": "The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as read or answers.",
+          "zh": "告诉 cx 收件箱写什么、你的回答如何传回。"
         }
       }
     },
     "builds": [
-      "@comchatx/cx-board"
+      {
+        "on": "@comchatx/cx-board",
+        "need": "required",
+        "why": {
+          "en": "Shows your Inbox beside the chat.",
+          "zh": "用于在对话旁显示收件箱。"
+        }
+      }
     ]
   },
   "devDependencies": {
+    "@comchatx/cx-board": "0.3.3",
     "@earendil-works/pi-coding-agent": "1.4.0",
     "@types/node": "26.2.0",
+    "happy-dom": "20.14.5",
     "typescript": "7.0.2",
     "vitest": "4.1.11"
   }

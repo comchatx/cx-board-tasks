@@ -30,21 +30,31 @@ it("the pinned pi lists the package's skills as its manifest names them, with no
   for (const skill of skills) expect(skill.description.trim(), skill.name).not.toBe("");
 });
 
-it("ships its skills, its README in English and in Chinese and its license, and nothing else", () => {
+it("ships its skills, its page, its README in English and in Chinese and its license, and nothing else", () => {
   // npm 12 keys its answer by the package's name; earlier ones answer a list.
   const answer = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { cwd: ROOT, encoding: "utf8" })) as { files: { path: string }[] }[] | Record<string, { files: { path: string }[] }>;
   const packed = Array.isArray(answer) ? answer : Object.values(answer);
-  const skills = walk(join(ROOT, "skills")).map((path) => relative(ROOT, path));
-  expect(packed[0]!.files.map((file) => file.path).sort()).toEqual(["LICENSE", "README.md", "README.zh-CN.md", "package.json", ...skills].sort());
-  expect(manifest.files).toEqual(["skills", "README.zh-CN.md"]);
+  const shipped = [...walk(join(ROOT, "skills")), ...walk(join(ROOT, "page"))].map((path) => relative(ROOT, path));
+  expect(packed[0]!.files.map((file) => file.path).sort()).toEqual(["LICENSE", "README.md", "README.zh-CN.md", "package.json", ...shipped].sort());
+  expect(manifest.files).toEqual(["skills", "page", "README.zh-CN.md"]);
 });
 
-it("names cx-board in builds as required, so the Plugins page installs the board with the module", () => {
-  // A builds entry given by its npm name alone is a required one; the module's to-dos live on the board's tab.
-  expect((manifest.comchatx as Record<string, unknown>)["builds"]).toEqual(["@comchatx/cx-board"]);
+it("names cx-board in builds as required, with the signed sentence why, so the Plugins page installs the board with the Inbox", () => {
+  expect((manifest.comchatx as Record<string, unknown>)["builds"]).toEqual([{ on: "@comchatx/cx-board", need: "required", why: { en: "Shows your Inbox beside the chat.", zh: "用于在对话旁显示收件箱。" } }]);
 });
 
-it("the card's name is comchatx.name, the one signed on 2026-11-11", () => {
-  const field = (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { comchatx: { name?: unknown } }).comchatx;
-  expect(field.name).toBe("Board To-dos");
+it("the card's name, its lines and the skill's row are the ones signed on 2026-11-11", () => {
+  const read = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { description: unknown; comchatx: { name?: unknown; about?: unknown; skills: Record<string, { about: { zh: unknown } }> } };
+  expect([read.comchatx.name, read.description, read.comchatx.about, read.comchatx.skills["cx-board-tasks"]!.about.zh]).toEqual(["Board Inbox", "Puts what cx found and what needs your answer in your Inbox.", "cx 的发现和要你决定的事放进收件箱，在那里直接回答。", "告诉 cx 收件箱写什么、你的回答如何传回。"]);
+});
+
+it("declares its page for the module's tab, 待办, named 收件箱 / Inbox, a file it ships", () => {
+  const board = (manifest.comchatx as Record<string, unknown>)["board"] as { tab: string; page: string; name: unknown };
+  expect(board).toEqual({ tab: "待办", page: "page/inbox.html", name: { zh: "收件箱", en: "Inbox" } });
+  expect(readFileSync(join(ROOT, board.page), "utf8")).toContain("window.cxBoard");
+});
+
+it("opens each README with its signed first paragraph", () => {
+  expect(readFileSync(join(ROOT, "README.md"), "utf8").split("\n")[0]).toBe("What cx found or changed waits in your Inbox on the board for you to mark as read, beside proposals and questions to answer. Each answer goes to cx as you send it. It needs cx-board installed too.");
+  expect(readFileSync(join(ROOT, "README.zh-CN.md"), "utf8").split("\n")[0]).toBe("cx 查到的发现、做过的修改放在看板的「收件箱」里，看过点「已读」；要你同意、选择或填写的也在这里，直接回答，cx 接着做。它需要 cx-board，两个插件都要安装。");
 });
