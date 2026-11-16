@@ -20,6 +20,17 @@ it("gives the page's names as signed, and the skill's row as signed, its first s
   expect(skill).toContain("description: The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as read or answers. ");
 });
 
+it("says in the description, which cx holds at every turn, that what cx has for the seller is a card and the chat shows the card, not its words", () => {
+  const description = /^description: (.*)$/m.exec(skill)?.[1] ?? "";
+  for (const said of ["the seller reads what you have for them in the Inbox", "your answer to what they asked, a small one too", "the chat shows the card by its title and where it stands, with no copy of its words"]) expect(description, said).toContain(said);
+  expect(description).not.toContain("Use when you leave the seller something to decide");
+});
+
+it("says where the seller reads, and that cx's steps and a question asked in the turn are the chat's", () => {
+  expect(skill).toContain("The seller reads each card on its own, later, without the chat beside it");
+  expect(skill).toContain("What you do on the way, your steps and a question you ask in your turn through pi's question box, is the chat's and not a card.");
+});
+
 it("states facts and no procedure: no step tells cx when to write a card, and nothing of 0.2's places and Send to cx is left", () => {
   for (const gone of ["交给 cx", "Send to cx", "you should", "always ", "must ", "`choice` or an `input` entry"]) expect(skill, gone).not.toContain(gone);
 });
