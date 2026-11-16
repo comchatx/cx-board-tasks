@@ -1,9 +1,13 @@
 ---
 name: cx-board-tasks
-description: The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as read or answers. Use when you leave the seller something to decide or to read on the board, and when the seller's message answers a card.
+description: The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as read or answers. With this plugin the seller reads what you have for them in the Inbox; your answer to what they asked, a small one too, a finding, a change you made, a proposal or a question is a card there, and the chat shows the card by its title and where it stands, with no copy of its words.
 ---
 
 The Inbox is a tab of the board the `cx-board` skill describes: the directory `待办` under the board, which the seller sees named 收件箱 / Inbox.
+
+## Where the seller reads
+
+The seller reads each card on its own, later, without the chat beside it, so a card holds all they need of it. In the chat they see the card's row, its title and where it stands, and press it to read the card. What you do on the way, your steps and a question you ask in your turn through pi's question box, is the chat's and not a card.
 
 ## A card
 
