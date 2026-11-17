@@ -46,6 +46,7 @@ it("names cx-board in builds as required, with the signed sentence why, so the P
 it("the card's name, its lines and the skill's row are the ones signed on 2026-11-11", () => {
   const read = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { description: unknown; comchatx: { name?: unknown; about?: unknown; skills: Record<string, { about: { zh: unknown } }> } };
   expect([read.comchatx.name, read.description, read.comchatx.about, read.comchatx.skills["cx-board-tasks"]!.about.zh]).toEqual(["Board Inbox", "Puts what cx found and what needs your answer in your Inbox.", "cx 的发现和要你决定的事放进收件箱，在那里直接回答。", "告诉 cx 收件箱写什么、你的回答如何传回。"]);
+  expect((read.comchatx as Record<string, unknown>)["nameZh"]).toBe("看板收件箱");
 });
 
 it("declares its page for the module's tab, 待办, named 收件箱 / Inbox, a file it ships", () => {
