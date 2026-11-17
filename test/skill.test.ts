@@ -44,3 +44,7 @@ it("says which card stands first and in what order the rest stand, as the page d
 it("tells cx the Inbox draws a card's words as plain paragraphs, its marks of formatting as typed", () => {
   expect(skill).toContain("The Inbox draws them as plain paragraphs: a blank line starts a new one, any other line break is a space, and marks of formatting, such as `**`, `#`, a list's `-` or a table's `|`, print as typed");
 });
+
+it("tells cx that the Inbox asks for the board when a card lands, and what bounds the ask", () => {
+  expect(skill).toContain("When a new card lands, the Inbox asks for the board to be shown: the column opens on the Inbox, waits while the seller is typing where it would cover the chat, and stays shut once the seller has closed what such an ask opened.");
+});
