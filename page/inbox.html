@@ -133,28 +133,41 @@
 
   // ---- What the tab holds ----
   const S = { cards: new Map(), view: "now", find: "", whole: new Set(), shown: new Set(), weeks: new Set(), gone: new Map(), failed: new Set(), busy: new Set(), fields: new Map() };
-  let reading = false, again = false;
+  let reading = false, again = false, first = true;
   const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+  // Half the frame's 32 asks out at once, so the page's other asks (its count, a write) find room beside a wave.
+  const WAVE = 16, OWED = new Set(["too_often", "busy"]);
   /**
-   * The tab read again: its list, then each Markdown file not read at the time the list gives it, waiting ones first. The board takes a
-   * page's asks in a bucket of 32 and ten a second; a first open of a tab of more than 32 cards meets its refusal, and waits a second.
+   * The tab read again: its list, then every Markdown file not read at the time the list gives it, waiting ones first, `WAVE` at once.
+   * The frame holds at most 32 of a page's asks out at once (`busy`) and the board takes them in a bucket of 32 and ten a second
+   * (`too_often`): a read refused either way is still owed, and the page draws what it read and asks again for it a second later.
    */
   async function load() {
     if (reading) { again = true; return; }
     reading = true;
+    const held = new Set(S.cards.keys());
+    let read = false;
     try {
       const listed = (await board.list()).filter((one) => /\.md$/i.test(one.file));
+      read = true;
       const now = new Set(listed.map((one) => one.file));
       for (const file of [...S.cards.keys()]) if (!now.has(file)) { S.cards.delete(file); S.fields.delete(file); }
       const stale = listed.filter((one) => S.cards.get(one.file)?.modified !== one.modified)
         .sort((a, b) => Number(/^done\//.test(a.file)) - Number(/^done\//.test(b.file)) || b.modified - a.modified);
-      for (let at = 0; at < stale.length;) {
-        const one = stale[at];
-        try { S.cards.set(one.file, readCard(one.file, one.modified, await board.read(one.file))); at += 1; }
-        catch (error) { if (error?.message === "too_often") { draw(); await pause(1000); } else at += 1; }
+      for (let left = stale; left.length > 0;) {
+        const wave = left.slice(0, WAVE);
+        const said = await Promise.allSettled(wave.map((one) => board.read(one.file)));
+        said.forEach((one, at) => { if (one.status === "fulfilled") S.cards.set(wave[at].file, readCard(wave[at].file, wave[at].modified, one.value)); });
+        const owed = wave.filter((_, at) => said[at].status === "rejected" && OWED.has(said[at].reason?.message));
+        left = [...owed, ...left.slice(WAVE)];
+        if (owed.length > 0) { draw(); await pause(1000); }
       }
     } catch { /* the board said no: what was read stands */ }
     reading = false;
+    // A card this read brought that the page did not hold asks for the board, by the card's own name; the first read asks for none.
+    const fresh = first ? [] : [...S.cards.values()].filter((c) => c.done === undefined && !held.has(c.file)).sort((a, b) => b.modified - a.modified);
+    if (read) first = false;
+    if (fresh.length > 0) void board.show(fresh[0].file).catch(() => {});
     draw();
     if (wanted !== undefined) bring();
     if (again) { again = false; void load(); }
@@ -175,36 +188,44 @@
     const wrote = await board.write(c.file, text);
     S.cards.set(c.file, readCard(c.file, wrote.modified, text));
   }
+  /** The card as the press leaves it, drawn at the press: its time stays the file's, so a read before the write lands keeps it. */
+  const moved = (c, how, answer) => S.cards.set(c.file, readCard(c.file, c.modified, marked(c.text, { done: how, at: Date.now(), ...(answer === undefined ? {} : { answer }) })));
   async function tick(c) {
     if (S.busy.has(c.file)) return;
     const at = waiting().indexOf(c);
     S.busy.add(c.file);
-    draw();
-    try { await mark(c, "read"); sayIt(W.said.read()); } catch { /* the card stands as it was */ }
+    moved(c, "read");
+    draw(); focusAfter(at); sayIt(W.said.read());
+    try { await mark(c, "read"); } catch { S.cards.set(c.file, c); /* the card is back as it was */ }
     S.busy.delete(c.file);
-    draw(); focusAfter(at);
+    draw();
   }
   /** A reply is the seller's message to cx about the card: it goes as their message, naming the card, and the card is marked answered. */
   async function answer(c, words) {
     if (S.busy.has(c.file)) return;
     const at = waiting().indexOf(c);
     S.busy.add(c.file);
-    draw();
+    moved(c, "answered", words);
+    draw(); focusAfter(at);
     try { await board.send(words, { card: c.file }); }
-    catch { S.busy.delete(c.file); S.failed.add(c.file); draw(); S.fields.get(c.file)?.focus(); return; }
+    catch { S.cards.set(c.file, c); S.busy.delete(c.file); S.failed.add(c.file); draw(); S.fields.get(c.file)?.focus(); return; }
     S.failed.delete(c.file);
     S.fields.delete(c.file);
-    try { await mark(c, "answered", words); } catch { /* sent; the mark is the board's next read */ }
+    sayIt(W.said.answered());
+    // Sent, and the mark not written: the file still says what the card said, so the card stands as it was read.
+    try { await mark(c, "answered", words); } catch { S.cards.set(c.file, c); }
     S.busy.delete(c.file);
-    draw(); focusAfter(at); sayIt(W.said.answered());
+    draw();
   }
   /** Dismissed, a card leaves and nothing is sent. A line stands where it stood until the list is next drawn anew, and takes it back. */
   async function dismiss(c) {
     if (S.busy.has(c.file)) return;
     const at = waiting().indexOf(c);
     S.busy.add(c.file);
-    draw();
-    try { await mark(c, "dismissed"); S.gone.set(c.file, { title: c.title, at }); sayIt(W.said.dismissed()); } catch { /* the card stands */ }
+    moved(c, "dismissed");
+    S.gone.set(c.file, { title: c.title, at });
+    draw(); sayIt(W.said.dismissed());
+    try { await mark(c, "dismissed"); } catch { S.cards.set(c.file, c); S.gone.delete(c.file); /* the card is back as it was */ }
     S.busy.delete(c.file);
     draw();
     document.querySelector(`[data-for="${CSS.escape(c.file)}"] button`)?.focus();

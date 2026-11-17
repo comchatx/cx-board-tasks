@@ -11,7 +11,7 @@ The seller reads each card on its own, later, without the chat beside it, so a c
 
 ## A card
 
-A card is a Markdown file anywhere under `待办/`, named as the `cx-board` skill says. It opens with front matter, then your words for the seller, drawn as plain paragraphs:
+A card is a Markdown file anywhere under `待办/`, named as the `cx-board` skill says. It opens with front matter, then your words for the seller. The Inbox draws them as plain paragraphs: a blank line starts a new one, any other line break is a space, and marks of formatting, such as `**`, `#`, a list's `-` or a table's `|`, print as typed:
 
 ```markdown
 ---
@@ -28,6 +28,7 @@ Your words.
 - `reply: true` makes the card your answer to the seller's last message: the Inbox shows the newest such card first.
 - Then the cards that ask, then those that tell, each part newest first by the file's time. The seller reads each card on its own.
 - A card does not hold your turn. You go on, and the seller answers when they come to it.
+- When a new card lands, the Inbox asks for the board to be shown: the column opens on the Inbox, waits while the seller is typing where it would cover the chat, and stays shut once the seller has closed what such an ask opened.
 
 ## The page's names
 
