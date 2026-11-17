@@ -28,7 +28,7 @@ function stand(files: Record<string, string>) {
     write: vi.fn(async (file: string, text: string) => { asked.push(["write", file, text]); fail("write"); const modified = clock++; held.set(file, { text, modified }); return { modified, size: text.length }; }),
     send: vi.fn(async (text: string, given?: { card?: string }) => { asked.push(["send", text, given?.card]); fail("send"); return "sent"; }),
     count: vi.fn(async (n: number, words?: string | null) => { asked.push(["count", n, words]); return undefined; }),
-    draft: vi.fn(), show: vi.fn(),
+    draft: vi.fn(), show: vi.fn(async (name: string) => { asked.push(["show", name]); return undefined; }),
   };
   const tell = (name: string, value?: unknown): void => { for (const one of hearing[name] ?? []) one(value); };
   return { board, held, refuse, asked, tell, add: (file: string, text: string) => { held.set(file, { text, modified: clock++ }); } };
@@ -208,21 +208,59 @@ it("keeps the words typed in every card that has not sent them when the page dra
   expect([cardOf("a.md").querySelector("input")!.value, cardOf("b.md").querySelector("input")!.value]).toEqual(["Twenty", "Yes"]);
 });
 
-it("sends an answer once while it is on its way, its field and Send held until it is", async () => {
+it("takes an answered card from the list at the press, before its answer is sent, and sends it once", async () => {
   const made = open({ "b.md": ASK });
   await settle();
   let accept: (said: string) => void = () => {};
   made.board.send.mockImplementationOnce(() => new Promise<string>((done) => { accept = done; }));
-  cardOf("b.md").querySelector<HTMLInputElement>("input")!.value = "Twenty";
+  const field = cardOf("b.md").querySelector<HTMLInputElement>("input")!;
+  field.value = "Twenty";
   cardOf("b.md").querySelector<HTMLButtonElement>(".t-reply button")!.click();
-  await settle();
-  const held = cardOf("b.md");
-  expect([held.querySelector("input")!.disabled, held.querySelector<HTMLButtonElement>(".t-reply button")!.disabled, held.querySelector("input")!.value]).toEqual([true, true, "Twenty"]);
-  held.querySelector<HTMLButtonElement>(".t-reply button")!.click();
-  held.querySelector("input")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  expect(cards()).toEqual([]);
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
   accept("sent");
   await settle();
-  expect(made.board.send).toHaveBeenCalledTimes(1);
+  expect([made.board.send.mock.calls.length, made.board.write.mock.calls.length, cards()]).toEqual([1, 1, []]);
+  expect(made.held.get("b.md")!.text).toContain("\ndone: answered\n");
+});
+
+it("brings a card back as it was when its mark is not written: a tick and a dismiss with no line of their own, an answer with its words and its line", async () => {
+  const made = open({ "a.md": TELL, "b.md": ASK });
+  await settle();
+  made.refuse["write"] = ["unavailable", "unavailable"];
+  cardOf("a.md").querySelector<HTMLButtonElement>(".t-mark")!.click();
+  expect(cards()).toEqual(["Restock the blue kettle? asks"]);
+  await settle();
+  expect([cards(), document.querySelector(".t-fail")]).toEqual([["Restock the blue kettle? asks", "Storage fees rose tells"], null]);
+  cardOf("b.md").querySelector<HTMLButtonElement>(".t-mark")!.click();
+  expect(document.querySelector(".t-gone")).not.toBeNull();
+  await settle();
+  expect([cards(), document.querySelector(".t-gone"), document.querySelector(".t-fail")]).toEqual([["Restock the blue kettle? asks", "Storage fees rose tells"], null, null]);
+  made.refuse["send"] = ["unavailable"];
+  cardOf("b.md").querySelector<HTMLInputElement>("input")!.value = "Twenty";
+  cardOf("b.md").querySelector<HTMLButtonElement>(".t-reply button")!.click();
+  expect(cards()).toEqual(["Storage fees rose tells"]);
+  await settle();
+  expect([cards(), cardOf("b.md").querySelector("input")!.value, cardOf("b.md").querySelector(".t-fail")!.textContent]).toEqual([["Restock the blue kettle? asks", "Storage fees rose tells"], "Twenty", "Your answer was not sent."]);
+  expect([made.held.get("a.md")!.text, made.held.get("b.md")!.text]).toEqual([TELL, ASK]);
+});
+
+it("asks for the board by a card's own name when a read brings a waiting card it did not hold, and never on its first read", async () => {
+  const made = open({ "a.md": TELL });
+  await settle();
+  made.tell("files");
+  await settle();
+  expect(made.board.show).not.toHaveBeenCalled();
+  made.add("a.md", TELL.replace("Up", "Now up"));
+  made.add("done/old.md", "---\ntitle: Old\ndone: read\ndoneAt: 2026-10-20T08:00:00.000Z\n---\nGone.");
+  made.tell("files");
+  await settle();
+  expect(made.board.show).not.toHaveBeenCalled();
+  made.add("x/new.md", "---\ntitle: New\n---\nWords.");
+  made.add("x/newer.md", "---\ntitle: Newer\n---\nWords.");
+  made.tell("files");
+  await settle();
+  expect(made.board.show.mock.calls).toEqual([["x/newer.md"]]);
 });
 
 it("reaches a card's answer, then Send, then its dismiss by Tab", async () => {
@@ -297,7 +335,7 @@ it("keeps the words the seller selected selected, in their direction, when the p
   expect([active.selectionStart, active.selectionEnd, active.selectionDirection]).toEqual([1, 5, "forward"]);
 });
 
-for (const action of ["tick", "dismiss", "undo"] as const) it(`does one ${action} for two presses while the first is on its way, its control held until it is`, async () => {
+for (const action of ["tick", "dismiss", "undo"] as const) it(action === "undo" ? "does one undo for two presses while the first is on its way, its control held until it is" : `moves a card at its ${action}, before the file is read and written, and does it once`, async () => {
   const made = open({ "a.md": action === "tick" ? TELL : ASK });
   await settle();
   if (action === "undo") { cardOf("a.md").querySelector<HTMLButtonElement>(".t-mark")!.click(); await settle(); }
@@ -308,7 +346,8 @@ for (const action of ["tick", "dismiss", "undo"] as const) it(`does one ${action
   const press = (): HTMLButtonElement => action === "undo" ? document.querySelector<HTMLButtonElement>(".t-gone button")! : cardOf("a.md").querySelector<HTMLButtonElement>(".t-mark")!;
   const first = press();
   first.click();
-  expect(press().disabled).toBe(true);
+  if (action === "undo") expect(press().disabled).toBe(true);
+  else expect([cards(), document.querySelector(".t-gone") !== null]).toEqual([[], action === "dismiss"]);
   first.click();
   expect(made.board.read).toHaveBeenCalledTimes(1);
   g.release();
@@ -316,4 +355,22 @@ for (const action of ["tick", "dismiss", "undo"] as const) it(`does one ${action
   expect(made.board.write).toHaveBeenCalledTimes(action === "undo" ? 2 : 1);
   if (action === "undo") expect(made.held.get("a.md")!.text).toBe(ASK);
   else expect(made.held.get("a.md")!.text).toContain(`done: ${action === "tick" ? "read" : "dismissed"}`);
+});
+
+it("reads every card it does not hold at once, not one after another", async () => {
+  const g = gate();
+  document.documentElement.dataset["locale"] = "en";
+  document.body.className = "kit";
+  document.body.innerHTML = BODY;
+  const board = stand({ "a.md": TELL, "b.md": ASK, "c.md": "---\ntitle: Third\n---\nx\n" });
+  const read = board.board.read.getMockImplementation()!;
+  board.board.read.mockImplementation(async (file) => { await g.promise; return await read(file); });
+  Object.defineProperty(window, "cxBoard", { configurable: true, value: board.board });
+  new Function(KIT)();
+  new Function(SCRIPT)();
+  await settle();
+  expect(board.board.read).toHaveBeenCalledTimes(3);
+  g.release();
+  await settle();
+  expect(cards()).toHaveLength(3);
 });

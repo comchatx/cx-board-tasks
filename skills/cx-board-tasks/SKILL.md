@@ -28,6 +28,7 @@ Your words.
 - `reply: true` makes the card your answer to the seller's last message: the Inbox shows the newest such card first.
 - Then the cards that ask, then those that tell, each part newest first by the file's time. The seller reads each card on its own.
 - A card does not hold your turn. You go on, and the seller answers when they come to it.
+- When a new card lands, the Inbox asks for the board to be shown: the column opens on the Inbox, waits while the seller is typing where it would cover the chat, and stays shut once the seller has closed what such an ask opened.
 
 ## The page's names
 
