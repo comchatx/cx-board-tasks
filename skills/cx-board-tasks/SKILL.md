@@ -11,7 +11,7 @@ The seller reads each card on its own, later, without the chat beside it, so a c
 
 ## A card
 
-A card is a Markdown file anywhere under `待办/`, named as the `cx-board` skill says. It opens with front matter, then your words for the seller, drawn as plain paragraphs:
+A card is a Markdown file anywhere under `待办/`, named as the `cx-board` skill says. It opens with front matter, then your words for the seller. The Inbox draws them as plain paragraphs: a blank line starts a new one, any other line break is a space, and marks of formatting, such as `**`, `#`, a list's `-` or a table's `|`, print as typed:
 
 ```markdown
 ---

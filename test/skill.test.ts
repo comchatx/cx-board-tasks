@@ -40,3 +40,7 @@ it("says which card stands first and in what order the rest stand, as the page d
   expect(skill).toContain("Then the cards that ask, then those that tell, each part newest first by the file's time.");
   expect(skill).toContain("The seller may dismiss a card that asks, 忽略 / Dismiss.");
 });
+
+it("tells cx the Inbox draws a card's words as plain paragraphs, its marks of formatting as typed", () => {
+  expect(skill).toContain("The Inbox draws them as plain paragraphs: a blank line starts a new one, any other line break is a space, and marks of formatting, such as `**`, `#`, a list's `-` or a table's `|`, print as typed");
+});
