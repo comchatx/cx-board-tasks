@@ -135,10 +135,12 @@
   const S = { cards: new Map(), view: "now", find: "", whole: new Set(), shown: new Set(), weeks: new Set(), gone: new Map(), failed: new Set(), busy: new Set(), fields: new Map() };
   let reading = false, again = false, first = true;
   const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+  // Half the frame's 32 asks out at once, so the page's other asks (its count, a write) find room beside a wave.
+  const WAVE = 16, OWED = new Set(["too_often", "busy"]);
   /**
-   * The tab read again: its list, then every Markdown file not read at the time the list gives it, all at once, waiting ones first. The
-   * board takes a page's asks in a bucket of 32 and ten a second; a first open of a tab of more than 32 cards meets its refusal for the
-   * rest, draws what it read, and asks again for those a second later.
+   * The tab read again: its list, then every Markdown file not read at the time the list gives it, waiting ones first, `WAVE` at once.
+   * The frame holds at most 32 of a page's asks out at once (`busy`) and the board takes them in a bucket of 32 and ten a second
+   * (`too_often`): a read refused either way is still owed, and the page draws what it read and asks again for it a second later.
    */
   async function load() {
     if (reading) { again = true; return; }
@@ -153,10 +155,12 @@
       const stale = listed.filter((one) => S.cards.get(one.file)?.modified !== one.modified)
         .sort((a, b) => Number(/^done\//.test(a.file)) - Number(/^done\//.test(b.file)) || b.modified - a.modified);
       for (let left = stale; left.length > 0;) {
-        const said = await Promise.allSettled(left.map((one) => board.read(one.file)));
-        said.forEach((one, at) => { if (one.status === "fulfilled") S.cards.set(left[at].file, readCard(left[at].file, left[at].modified, one.value)); });
-        left = left.filter((_, at) => said[at].status === "rejected" && said[at].reason?.message === "too_often");
-        if (left.length > 0) { draw(); await pause(1000); }
+        const wave = left.slice(0, WAVE);
+        const said = await Promise.allSettled(wave.map((one) => board.read(one.file)));
+        said.forEach((one, at) => { if (one.status === "fulfilled") S.cards.set(wave[at].file, readCard(wave[at].file, wave[at].modified, one.value)); });
+        const owed = wave.filter((_, at) => said[at].status === "rejected" && OWED.has(said[at].reason?.message));
+        left = [...owed, ...left.slice(WAVE)];
+        if (owed.length > 0) { draw(); await pause(1000); }
       }
     } catch { /* the board said no: what was read stands */ }
     reading = false;
@@ -208,7 +212,8 @@
     S.failed.delete(c.file);
     S.fields.delete(c.file);
     sayIt(W.said.answered());
-    try { await mark(c, "answered", words); } catch { /* sent; the mark is the board's next read */ }
+    // Sent, and the mark not written: the file still says what the card said, so the card stands as it was read.
+    try { await mark(c, "answered", words); } catch { S.cards.set(c.file, c); }
     S.busy.delete(c.file);
     draw();
   }
