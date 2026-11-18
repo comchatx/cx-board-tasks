@@ -56,6 +56,6 @@ it("declares its page for the module's tab, 待办, named 收件箱 / Inbox, a f
 });
 
 it("opens each README with its signed first paragraph", () => {
-  expect(readFileSync(join(ROOT, "README.md"), "utf8").split("\n")[0]).toBe("What cx found or changed waits in your Inbox on the board for you to mark as read, beside proposals and questions to answer. Each answer goes to cx as you send it. It needs cx-board installed too.");
-  expect(readFileSync(join(ROOT, "README.zh-CN.md"), "utf8").split("\n")[0]).toBe("cx 查到的发现、做过的修改放在看板的「收件箱」里，看过点「已读」；要你同意、选择或填写的也在这里，直接回答，cx 接着做。它需要 cx-board，两个插件都要安装。");
+  expect(readFileSync(join(ROOT, "README.md"), "utf8").split("\n")[0]).toBe("What cx found or changed waits in your Inbox on the board for you to mark as read, beside proposals and questions to answer. Each answer goes to cx as you send it. It needs [Flex Board](https://www.npmjs.com/package/@comchatx/cx-board) installed too.");
+  expect(readFileSync(join(ROOT, "README.zh-CN.md"), "utf8").split("\n")[0]).toBe("cx 查到的发现、做过的修改放在看板的「收件箱」里，看过点「已读」；要你同意、选择或填写的也在这里，直接回答，cx 接着做。它需要[灵动看板](https://www.npmjs.com/package/@comchatx/cx-board)，两个插件都要安装。");
 });
