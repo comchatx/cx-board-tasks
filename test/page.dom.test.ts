@@ -245,6 +245,41 @@ it("brings a card back as it was when its mark is not written: a tick and a dism
   expect([made.held.get("a.md")!.text, made.held.get("b.md")!.text]).toEqual([TELL, ASK]);
 });
 
+it("draws an answered card where its file says once the next read comes, when the answer was sent and its mark was not written, and sends nothing again", async () => {
+  const made = open({ "a.md": TELL, "b.md": ASK });
+  await settle();
+  made.refuse["write"] = ["unavailable"];
+  typeIn("b.md", "Twenty");
+  cardOf("b.md").querySelector<HTMLButtonElement>(".t-reply button")!.click();
+  expect(cards()).toEqual(["Storage fees rose tells"]);
+  await settle();
+  made.tell("files");
+  await settle();
+  expect([cards(), document.querySelector(".t-fail"), made.held.get("b.md")!.text, made.board.send.mock.calls.length]).toEqual([["Restock the blue kettle? asks", "Storage fees rose tells"], null, ASK, 1]);
+});
+
+it("draws every card of a tab longer than the frame's 32 asks out at once, and asks again a second later for a read refused busy", async () => {
+  const files = Object.fromEntries(Array.from({ length: 45 }, (_, n) => [`f${String(n).padStart(2, "0")}.md`, `---\ntitle: Card ${n}\n---\nx\n`]));
+  document.documentElement.dataset["locale"] = "en";
+  document.body.className = "kit";
+  document.body.innerHTML = BODY;
+  const made = stand(files);
+  const read = made.board.read.getMockImplementation()!;
+  let out = 0, most = 0, busy = 0;
+  made.board.read.mockImplementation(async (file) => {
+    if (out >= 32 || (busy < 2 && file === "f44.md")) { busy += 1; throw new Error("busy"); }
+    out += 1; most = Math.max(most, out);
+    try { await new Promise((done) => setTimeout(done, 10)); return await read(file); } finally { out -= 1; }
+  });
+  Object.defineProperty(window, "cxBoard", { configurable: true, value: made.board });
+  new Function(KIT)();
+  new Function(SCRIPT)();
+  await vi.waitFor(() => expect(cards()).toHaveLength(45), { timeout: 4000 });
+  const asked = made.board.read.mock.calls.length;
+  await new Promise((done) => setTimeout(done, 1200));
+  expect([busy, most <= 32, made.board.read.mock.calls.length, asked]).toEqual([2, true, 47, 47]);
+});
+
 it("asks for the board by a card's own name when a read brings a waiting card it did not hold, and never on its first read", async () => {
   const made = open({ "a.md": TELL });
   await settle();
