@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-board-tasks",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Puts what cx found and what needs your answer in your Inbox.",
   "license": "MIT",
   "author": "ComChatX",
@@ -64,7 +64,7 @@
     ]
   },
   "devDependencies": {
-    "@comchatx/cx-board": "0.3.3",
+    "@comchatx/cx-board": "0.3.8",
     "@earendil-works/pi-coding-agent": "1.4.0",
     "@types/node": "26.2.0",
     "happy-dom": "20.14.5",
