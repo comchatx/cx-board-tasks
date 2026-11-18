@@ -193,7 +193,7 @@
     if (found === null) return { lines: undefined, keys: new Map(), body: text.replace(/^﻿/, "") };
     const lines = found[1].split(/\r?\n/);
     const keys = new Map();
-    for (const line of lines) { const one = /^([A-Za-z][\w-]*):(.*)$/.exec(line); if (one !== null) keys.set(one[1], value(one[2])); }
+    for (const line of lines) { const one = /^([A-Za-z][\w-]*):(.*)$/s.exec(line); if (one !== null) keys.set(one[1], value(one[2])); }
     return { lines, keys, body: text.slice(found[0].length) };
   }
   const json = (text) => { try { return JSON.parse(text); } catch { return undefined; } };

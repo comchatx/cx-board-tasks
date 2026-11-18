@@ -626,6 +626,13 @@ it("draws a card that asks with options by the kit's questionnaire, sends the an
   expect(cards()).toEqual(["Storage fees rose tells"]);
 });
 
+it("reads a question holding a line or paragraph separator whole, as the form was written", async () => {
+  const words = ["Ship by sea\u2028or by air?", "Which\u2029warehouse?"];
+  open({ "q.md": FORM(words.map((one) => ({ words: one, options: [{ name: "Yes" }, { name: "No" }] }))) });
+  await settle();
+  expect(cardOf("q.md").querySelector(".kit-asked .entry-title")?.textContent ?? "").toContain(words[0]);
+});
+
 it("offers Skip where a card asks several questions, keeps the picks across a draw, sends each question over its answer, and dismisses a card with every question skipped", async () => {
   const made = open({ "q.md": FORM(TWO), "s.md": FORM(TWO).replace("Pick a supplier", "Skip me"), "a.md": TELL });
   await settle();
