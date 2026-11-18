@@ -98,7 +98,6 @@
   .t-card.t-asks > .t-mark { position: absolute; top: calc(var(--space-4) - var(--space-1)); right: calc(var(--space-5) - var(--space-2)); margin: 0; }
   /* A card that asks with options: the kit's questionnaire, its heading the question in front, clear of the × at the corner. */
   .t-form > .kit-asked > .entry-title { padding-right: calc(var(--space-7) - var(--space-2) + var(--space-4)); font-weight: var(--weight-strong); }
-  .t-form > .kit-asked > .t-meta { margin-top: calc(var(--space-1) - var(--space-4)); }
   .t-reply { display: flex; align-items: center; gap: var(--space-4); }
   .t-reply > .entry-field { flex: 1 1 auto; min-width: 0; }
   .t-reply > button { flex: none; }
@@ -440,9 +439,8 @@
     const mark = box.querySelector(".t-level");
     const tip = h("div", { class: "t-tip", "aria-hidden": "true" }, W.levelWords[c.level - 1]());
     box.append(tip);
-    const at = mark.getBoundingClientRect(), card = box.getBoundingClientRect();
-    tip.style.left = `${Math.min(at.right - card.left + 6, box.clientWidth - tip.offsetWidth - 6)}px`;
-    tip.style.top = `${at.top - card.top + at.height / 2}px`;
+    tip.style.left = `${Math.min(mark.offsetLeft + mark.offsetWidth + 6, box.clientWidth - tip.offsetWidth - 6)}px`;
+    tip.style.top = `${mark.offsetTop + mark.offsetHeight / 2}px`;
   }
   /** The line under a card's title: its mark of urgency, then its time. The mark shows what it means as the kit's label does: under the pointer and the keyboard's focus; Escape takes it away. */
   function meta(c) {
