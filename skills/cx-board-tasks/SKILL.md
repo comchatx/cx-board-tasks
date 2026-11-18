@@ -7,11 +7,11 @@ The Inbox is a tab of the board the `cx-board` skill describes: the directory `�
 
 ## Where the seller reads
 
-The seller reads each card on its own, later, without the chat beside it, so a card holds all they need of it. In the chat they see the card's row, its title and where it stands, and press it to read the card. What you do on the way, your steps and a question you ask in your turn through pi's question box, is the chat's and not a card.
+The seller reads each card on its own, later, without the chat beside it, so a card holds all they need of it. In the chat they see the card's row, its title and where it stands, and press it to read the card. What you do on the way, your steps, is the chat's and not a card. A question for the seller can be a card: the seller answers it when they come to the Inbox, and your turn does not wait on it.
 
 ## A card
 
-A card is a Markdown file anywhere under `待办/`, named as the `cx-board` skill says. It opens with front matter, then your words for the seller. The Inbox draws them as plain paragraphs: a blank line starts a new one, any other line break is a space, and marks of formatting, such as `**`, `#`, a list's `-` or a table's `|`, print as typed:
+A card is a Markdown file anywhere under `待办/`, named as the `cx-board` skill says. It opens with front matter, then your words for the seller. The Inbox draws them as your answers in the chat are drawn: bold, lists, tables, code and links, any HTML in them shown as text, and no image; a link in a card opens nothing. On a board that cannot draw them so, they stand as plain paragraphs, the marks of formatting printed as typed:
 
 ```markdown
 ---
@@ -19,7 +19,10 @@ title: Lower the price of the blue kettle to $24.99?
 asks: true
 ---
 
-Your words.
+It sells **6 a day** and 40 are left:
+
+- at $24.99, about 7 days of stock
+- at $26.99, about 9 days
 ```
 
 - `title` is the one line the seller reads first. Without it, the card's first heading is its title.

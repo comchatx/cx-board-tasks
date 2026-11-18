@@ -26,9 +26,10 @@ it("says in the description, which cx holds at every turn, that what cx has for 
   expect(description).not.toContain("Use when you leave the seller something to decide");
 });
 
-it("says where the seller reads, and that cx's steps and a question asked in the turn are the chat's", () => {
+it("says where the seller reads, that cx's steps are the chat's, and that a question can be a card the turn does not wait on", () => {
   expect(skill).toContain("The seller reads each card on its own, later, without the chat beside it");
-  expect(skill).toContain("What you do on the way, your steps and a question you ask in your turn through pi's question box, is the chat's and not a card.");
+  expect(skill).toContain("What you do on the way, your steps, is the chat's and not a card. A question for the seller can be a card: the seller answers it when they come to the Inbox, and your turn does not wait on it.");
+  expect(skill).not.toContain("question box");
 });
 
 it("states facts and no procedure: no step tells cx when to write a card, and nothing of 0.2's places and Send to cx is left", () => {
@@ -41,8 +42,10 @@ it("says which card stands first and in what order the rest stand, as the page d
   expect(skill).toContain("The seller may dismiss a card that asks, 忽略 / Dismiss.");
 });
 
-it("tells cx the Inbox draws a card's words as plain paragraphs, its marks of formatting as typed", () => {
-  expect(skill).toContain("The Inbox draws them as plain paragraphs: a blank line starts a new one, any other line break is a space, and marks of formatting, such as `**`, `#`, a list's `-` or a table's `|`, print as typed");
+it("tells cx the Inbox draws a card's words as the chat draws its answers, and as plain paragraphs on a board that cannot", () => {
+  expect(skill).toContain("The Inbox draws them as your answers in the chat are drawn: bold, lists, tables, code and links, any HTML in them shown as text, and no image; a link in a card opens nothing.");
+  expect(skill).toContain("On a board that cannot draw them so, they stand as plain paragraphs, the marks of formatting printed as typed");
+  expect(skill).toContain("It sells **6 a day** and 40 are left:\n\n- at $24.99");
 });
 
 it("tells cx that the Inbox asks for the board when a card lands, and what bounds the ask", () => {

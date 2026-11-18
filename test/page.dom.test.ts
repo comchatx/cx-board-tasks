@@ -34,11 +34,12 @@ function stand(files: Record<string, string>) {
   return { board, held, refuse, asked, tell, add: (file: string, text: string) => { held.set(file, { text, modified: clock++ }); } };
 }
 
-function open(files: Record<string, string>, locale = "en"): Board {
+function open(files: Record<string, string>, locale = "en", asks: Record<string, unknown> = {}): Board {
   document.documentElement.dataset["locale"] = locale;
   document.body.className = "kit";
   document.body.innerHTML = BODY;
   const made = stand(files);
+  Object.assign(made.board, asks);
   Object.defineProperty(window, "cxBoard", { configurable: true, value: made.board });
   new Function(KIT)();
   new Function(SCRIPT)();
@@ -408,4 +409,65 @@ it("reads every card it does not hold at once, not one after another", async () 
   g.release();
   await settle();
   expect(cards()).toHaveLength(3);
+});
+
+it("draws a card's words as cx's answers in the chat are, by the board's markdown ask, and as paragraphs until it answers, where it refuses, or where the board has none", async () => {
+  const LISTED = "---\ntitle: Profit this week\n---\n\n**Profit** by store:\n\n- US $1,284\n- UK £310\n";
+  const drawnBy = vi.fn(async (text: string) => `<p><strong>drawn</strong> ${text.length}</p>`);
+  const made = open({ "a.md": LISTED, "b.md": ASK }, "en", { markdown: drawnBy });
+  await settle();
+  const body = (file: string): HTMLElement => cardOf(file).querySelector<HTMLElement>(".t-words")!;
+  expect(drawnBy.mock.calls.map(([text]) => text).sort()).toEqual(["\n**Profit** by store:\n\n- US $1,284\n- UK £310\n", "\nIt sells 6 a day.\n\n40 are left.\n"].sort());
+  expect([body("a.md").classList.contains("markdown"), body("a.md").innerHTML]).toEqual([true, `<p><strong>drawn</strong> ${"\n**Profit** by store:\n\n- US $1,284\n- UK £310\n".length}</p>`]);
+  // Drawn once a version: another drawing asks nothing more; a file written since is asked again.
+  made.tell("context", { width: 500 });
+  await settle();
+  expect(drawnBy).toHaveBeenCalledTimes(2);
+  made.add("a.md", LISTED.replace("1,284", "1,300"));
+  made.tell("files");
+  await settle();
+  expect(drawnBy).toHaveBeenCalledTimes(3);
+  // A refusal leaves the words as paragraphs, and is not asked again until the file changes.
+  drawnBy.mockRejectedValueOnce(new Error("too_large"));
+  made.add("a.md", LISTED);
+  made.tell("files");
+  await settle();
+  expect([body("a.md").classList.contains("markdown"), [...body("a.md").querySelectorAll("p")].map((one) => one.textContent)]).toEqual([false, ["**Profit** by store:", "- US $1,284 - UK £310"]]);
+  made.tell("context", { width: 600 });
+  await settle();
+  expect(drawnBy).toHaveBeenCalledTimes(4);
+});
+
+it("asks for a card's drawing again a second after the frame turns it away as busy, and draws paragraphs on a board with no markdown ask", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const drawnBy = vi.fn(async () => "<p>drawn</p>");
+  drawnBy.mockRejectedValueOnce(new Error("busy"));
+  open({ "b.md": ASK }, "en", { markdown: drawnBy });
+  await settle();
+  expect(cardOf("b.md").querySelector(".t-words")!.classList.contains("markdown")).toBe(false);
+  await vi.advanceTimersByTimeAsync(1000);
+  await settle();
+  expect([drawnBy.mock.calls.length, cardOf("b.md").querySelector(".t-words")!.innerHTML]).toEqual([2, "<p>drawn</p>"]);
+  vi.useRealTimers();
+  open({ "b.md": ASK });
+  await settle();
+  expect([...cardOf("b.md").querySelectorAll(".t-words > p")].map((one) => one.textContent)).toEqual(["It sells 6 a day.", "40 are left."]);
+});
+
+it("draws a done card's words by the same drawing when its row is opened", async () => {
+  const made = open({ "a.md": "---\ntitle: Storage fees rose\ndone: read\n---\n\nUp **$41.20**.\n" }, "en", { markdown: vi.fn(async () => "<p>Up <strong>$41.20</strong>.</p>") });
+  await settle();
+  made.tell("focus", "a.md");
+  await settle();
+  expect(document.querySelector(".t-past .t-past-words.markdown strong")?.textContent).toBe("$41.20");
+});
+
+it("says the answer field's placeholder in the page's language as it is now, not as it was when the field was made", async () => {
+  const made = open({ "b.md": ASK });
+  await settle();
+  expect(cardOf("b.md").querySelector("input")!.placeholder).toBe("Answer cx");
+  document.documentElement.dataset["locale"] = "zh";
+  made.tell("context", { locale: "zh" });
+  await settle();
+  expect(cardOf("b.md").querySelector("input")!.placeholder).toBe("回答 cx");
 });
