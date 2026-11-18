@@ -617,10 +617,10 @@ it("draws a card that asks with options by the kit's questionnaire, sends the an
   card.querySelectorAll<HTMLInputElement>(".kit-option input")[1]!.click();
   cardOf("q.md").querySelector<HTMLButtonElement>(".kit-asked-foot .primary")!.click();
   await settle();
-  expect(made.board.send).toHaveBeenCalledWith("Ningbo B", { card: "q.md" });
+  expect(made.board.send).toHaveBeenCalledWith("Which supplier?\nNingbo B", { card: "q.md" });
   const text = made.held.get("q.md")!.text;
   expect(text).toContain("done: answered\n");
-  expect(text).toContain('answer: "Ningbo B"\n');
+  expect(text).toContain('answer: "Which supplier?\\nNingbo B"\n');
   const answers = /^answers: (.*)$/m.exec(text)![1]!;
   expect(JSON.parse(JSON.parse(answers))).toEqual({ form: "comchatx.options/1", answers: [{ chosen: ["Ningbo B"] }] });
   expect(cards()).toEqual(["Storage fees rose tells"]);
@@ -660,6 +660,66 @@ it("says each question and its answer once under Done", async () => {
   made.tell("focus", "q.md");
   await settle();
   expect([...document.querySelectorAll(".t-done p")].map((one) => one.textContent)).toEqual(["Which supplier?", "Yiwu A", "How many?", "Not answered"]);
+});
+
+const CONFIRM = (title: string, more = ""): string => `---\ntitle: ${title}\n${more}questions: ${JSON.stringify(JSON.stringify({ form: "comchatx.confirm/1", title }))}\n---\nThe kettle sells 6 a day.\n`;
+
+it("reads a saved answer only in its form's shape, so one in no shape draws from its words and invents no yes", async () => {
+  const done = (answer: string, answers: unknown): string => `done: answered\ndoneAt: 2026-11-10T09:00:00.000Z\nanswer: ${JSON.stringify(answer)}\nanswers: ${JSON.stringify(JSON.stringify(answers))}\n`;
+  const made = open({
+    "q.md": FORM(ONE).replace("level: 2\n", `level: 2\n${done("Ningbo B", { form: "comchatx.options/1", answers: [{ chosen: 5 }] })}`),
+    "c.md": CONFIRM("Ship 10 units?", done("No", { form: "comchatx.confirm/1", confirmed: "no" })),
+  });
+  await settle();
+  made.tell("focus", "q.md");
+  await settle();
+  made.tell("focus", "c.md");
+  await settle();
+  made.tell("context");
+  await settle();
+  const all = [...document.querySelectorAll(".t-done p")].map((one) => one.textContent);
+  expect(all).toEqual(expect.arrayContaining(["Who ships it?", "You: Ningbo B", "The kettle sells 6 a day.", "You: No"]));
+  expect(all).not.toContain("Yes");
+});
+
+it("sends a confirm as its question over the yes, and writes it onto no other question the file holds by then", async () => {
+  const made = open({ "c.md": CONFIRM("Ship 10 units?") });
+  await settle();
+  const sent = made.board.send.getMockImplementation()!;
+  made.board.send.mockImplementation(async (...asked) => { made.add("c.md", CONFIRM("Ship 500 units?")); return await sent(...asked); });
+  cardOf("c.md").querySelector<HTMLButtonElement>('[data-focus="yes"]')!.click();
+  await settle();
+  expect(made.board.send).toHaveBeenCalledWith("Ship 10 units?\nYes", { card: "c.md" });
+  expect(made.held.get("c.md")!.text).toBe(CONFIRM("Ship 500 units?"));
+});
+
+it("keeps the seller's picks, own words and place when the board refuses the send, and across a rewrite of the card's words alone", async () => {
+  const made = open({ "q.md": FORM(TWO) });
+  await settle();
+  const press = (name: string): void => cardOf("q.md").querySelector<HTMLElement>(`[data-focus="${name}"]`)!.click();
+  press("o1");
+  made.add("q.md", FORM(TWO).replace("Who ships it?", "Who ships it, and when?"));
+  made.tell("files");
+  await settle();
+  expect(cardOf("q.md").querySelector<HTMLInputElement>('[data-focus="o1"]')!.checked).toBe(true);
+  press("next");
+  press("other");
+  const own = cardOf("q.md").querySelector<HTMLInputElement>('[data-focus="own"]')!;
+  own.value = "  Keep these words  ";
+  own.dispatchEvent(new Event("input"));
+  made.refuse["send"] = ["busy"];
+  press("main");
+  await settle();
+  expect(cardOf("q.md").querySelector(".t-fail")).not.toBeNull();
+  expect(cardOf("q.md").querySelector(".kit-asked .entry-title")!.textContent).toContain("How many?");
+  expect(cardOf("q.md").querySelector<HTMLInputElement>('[data-focus="own"]')!.value).toBe("Keep these words");
+  press("previous");
+  expect(cardOf("q.md").querySelector<HTMLInputElement>('[data-focus="o1"]')!.checked).toBe(true);
+  press("next");
+  press("main");
+  await settle();
+  expect(made.board.send).toHaveBeenLastCalledWith("Which supplier?\nNingbo B\n\nHow many?\nKeep these words", { card: "q.md" });
+  expect(made.held.get("q.md")!.text).toContain("done: answered\n");
 });
 
 it("draws nothing and counts nothing until its first read is whole, and keeps every card it holds and its count while it reads again", async () => {

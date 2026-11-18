@@ -180,7 +180,6 @@
   // ---- A card, read from its file ----
   const ASKING = new Set(["proposal", "choice", "input"]);
   const DONE = new Set(["read", "answered", "dismissed"]);
-  const FORMS = new Set(["comchatx.options/1", "comchatx.confirm/1"]);
   /** A front-matter value: a JSON-quoted string as written, a single-quoted one, or the bare text. */
   function value(raw) {
     const text = raw.trim();
@@ -206,6 +205,13 @@
     const whole = form.questions.every((one) => typeof one?.words === "string" && Array.isArray(one.options) && one.options.length > 0 && one.options.every((option) => typeof option?.name === "string"));
     return whole ? form : undefined;
   }
+  /** A saved answer, taken only in the shape of the card's own form, as the platform reads one: else the card has none. */
+  function answersOf(value, form) {
+    if (form === undefined || value?.form !== form.form) return undefined;
+    if (form.form === "comchatx.confirm/1") return typeof value.confirmed === "boolean" ? value : undefined;
+    const one = (a) => a === null || (typeof a === "object" && Array.isArray(a.chosen) && a.chosen.every((name) => typeof name === "string") && (a.own === undefined || typeof a.own === "string"));
+    return Array.isArray(value.answers) && value.answers.length === form.questions.length && value.answers.every(one) ? value : undefined;
+  }
   function readCard(file, modified, text) {
     const { keys, body } = front(text);
     const heading = /^[ \t]*#{1,6}[ \t]+(.+?)[ \t#]*$/m.exec(body);
@@ -217,7 +223,7 @@
     const form = formOf(keys.get("questions"));
     const answers = json(keys.get("answers") ?? "");
     return {
-      file, modified, text, title, words, body: rest, form, answers: FORMS.has(answers?.form) ? answers : undefined,
+      file, modified, text, title, words, body: rest, form, answers: answersOf(answers, form),
       asks: form !== undefined || keys.get("asks") === "true" || ASKING.has(keys.get("kind")), reply: keys.get("reply") === "true",
       level: ["1", "2", "3"].includes(keys.get("level")) ? Number(keys.get("level")) : 1,
       done, doneAt: Number.isFinite(at) ? at : modified, answer: keys.get("answer"),
@@ -321,7 +327,10 @@
   // ---- What the seller does ----
   /** The file as it is now, its marks set: what cx wrote to it since it was drawn stays. */
   async function mark(c, how, answer, answers) {
-    const text = marked(await board.read(c.file), { done: how, at: Date.now(), answer, answers });
+    const now = await board.read(c.file);
+    // An answer is written only onto the questions it answers: a file whose questions are others by now stands as the disk has it.
+    if (answers !== undefined && JSON.stringify(readCard(c.file, c.modified, now).form) !== JSON.stringify(c.form)) { S.cards.set(c.file, readCard(c.file, c.modified, now)); return; }
+    const text = marked(now, { done: how, at: Date.now(), answer, answers });
     const wrote = await board.write(c.file, text);
     S.cards.set(c.file, readCard(c.file, wrote.modified, text));
   }
@@ -348,7 +357,7 @@
     moved(c, "answered", words, answers);
     draw(); focusAfter(at);
     try { await board.send(words, { card: c.file }); }
-    catch { S.cards.set(c.file, c); S.busy.delete(c.file); S.failed.add(c.file); S.asking.delete(c.file); draw(); (S.fields.get(c.file) ?? document.getElementById(idOf(c.file)))?.focus(); return; }
+    catch { S.cards.set(c.file, c); S.busy.delete(c.file); S.failed.add(c.file); if (answers !== undefined && c.form !== undefined) S.asking.set(c.file, asking(c, answers)); draw(); (S.fields.get(c.file) ?? document.getElementById(idOf(c.file)))?.focus(); return; }
     S.failed.delete(c.file);
     S.fields.delete(c.file);
     S.asking.delete(c.file);
@@ -475,10 +484,9 @@
   }
   /** What the seller chose, as words: the own answer first, then the options chosen; a question passed is 未作答. */
   const told = (one) => (one === null || one === undefined ? W.unanswered() : [...(one.own === undefined ? [] : [one.own]), ...one.chosen].join(w(", ", "、")));
-  /** The words the answer goes to cx in: an answer alone for one question, else each question over its answer. */
+  /** The words the answer goes to cx in: each question over its answer, a confirm's title over its yes or no, so cx reads what was agreed to. */
   function answerWords(form, value) {
-    if (form.form === "comchatx.confirm/1") return value.confirmed ? W.asked().yes : W.asked().no;
-    if (form.questions.length === 1) return told(value.answers[0]);
+    if (form.form === "comchatx.confirm/1") return `${form.title}\n${value.confirmed ? W.asked().yes : W.asked().no}`;
     return form.questions.map((question, at) => `${question.words}\n${told(value.answers[at])}`).join("\n\n");
   }
   /**
@@ -486,17 +494,32 @@
    * kept for as long as the card waits in one language, so a draw of the page keeps what the seller chose. Every question skipped is
    * the card dismissed, and nothing is sent.
    */
+  /**
+   * The kit's questionnaire for a card; given what the seller sent and the board refused, it stands as they left it, each pick and their
+   * own words put back through its own controls, on the last question, where they pressed.
+   */
+  function asking(c, sent) {
+    const under = meta(c);
+    const element = Kit.questions({ form: c.form, words: W.asked(), under, answer: (value) => {
+      const now = S.cards.get(c.file) ?? c;
+      if (value.answers !== undefined && value.answers.every((one) => one === null)) { void dismiss(now); return; }
+      void answer(now, answerWords(now.form, value), value);
+    } });
+    const press = (name) => element.querySelector(`[data-focus="${name}"]`);
+    const pick = (name) => { const input = press(name); if (input) { input.checked = true; input.dispatchEvent(new Event("change")); } };
+    (sent?.answers ?? []).forEach((one, at) => {
+      if (at > 0) press("next")?.click();
+      for (const name of one?.chosen ?? []) pick(`o${c.form.questions[at].options.findIndex((option) => option.name === name)}`);
+      if (one?.own !== undefined) { pick("other"); const own = press("own"); if (own) { own.value = one.own; own.dispatchEvent(new Event("input")); } }
+    });
+    return { form: JSON.stringify(c.form), lang: Kit.lang, modified: c.modified, under, element };
+  }
   function askingCard(c) {
     const busy = S.busy.has(c.file), id = idOf(c.file), failed = S.failed.has(c.file);
     let asked = S.asking.get(c.file);
-    if (asked === undefined || asked.modified !== c.modified || asked.lang !== Kit.lang) {
-      const element = Kit.questions({ form: c.form, words: W.asked(), under: meta(c), answer: (value) => {
-        if (value.answers !== undefined && value.answers.every((one) => one === null)) { void dismiss(c); return; }
-        void answer(c, answerWords(c.form, value), value);
-      } });
-      asked = { modified: c.modified, lang: Kit.lang, element };
-      S.asking.set(c.file, asked);
-    }
+    // One element for as long as the card's questions are the same in one language: a rewrite of its words alone keeps it, and its time.
+    if (asked === undefined || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c));
+    else if (asked.modified !== c.modified) { asked.under.replaceChildren(...meta(c).childNodes); asked.modified = c.modified; }
     return h("li", {}, h("article", { class: "entry t-card t-asks t-form", id, tabindex: "-1", "data-file": c.file },
       asked.element,
       failed && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent()),
@@ -579,14 +602,16 @@
   /** A card of 已处理: its title the press that opens it; a question said once, its answer under it; the day, what was done and the mark at its foot. */
   function pastCard(c) {
     const open = S.shown.has(c.file), id = idOf(c.file);
-    const questions = c.form === undefined ? [] : c.form.form === "comchatx.confirm/1" ? [{ words: c.form.title }] : c.form.questions;
+    // An answer kept in no shape of its form is no answer of the form's: the card is drawn from its words, as one without `answers` is.
+    const asForm = c.form !== undefined && !(c.done === "answered" && c.answers === undefined);
+    const questions = !asForm ? [] : c.form.form === "comchatx.confirm/1" ? [{ words: c.form.title }] : c.form.questions;
     const said = (at) => (c.done !== "answered" ? W.unanswered() : c.answers?.form === "comchatx.confirm/1" ? (c.answers.confirmed ? W.asked().yes : W.asked().no) : told(c.answers?.answers?.[at]));
     const when = h("span", { class: "t-when" }, W.at(W.how[c.done](), day(c.doneAt)));
     return h("li", { id, class: "entry t-done" },
       h("button", { type: "button", class: "t-open", "aria-expanded": String(open), onclick: () => { if (open) S.shown.delete(c.file); else S.shown.add(c.file); draw(); document.getElementById(id)?.querySelector("button")?.focus(); } },
         h("span", { class: "entry-title", dir: "auto" }, c.title)),
-      open && c.form === undefined && wordsOf(c, { class: "t-past-words", dir: "auto" }),
-      open && c.form === undefined && c.done === "answered" && c.answer && h("p", { class: "t-yours", dir: "auto" }, `${W.you()}${w(": ", "：")}${c.answer}`),
+      open && !asForm && wordsOf(c, { class: "t-past-words", dir: "auto" }),
+      open && !asForm && c.done === "answered" && c.answer && h("p", { class: "t-yours", dir: "auto" }, `${W.you()}${w(": ", "：")}${c.answer}`),
       open && questions.flatMap((question, at) => [!(at === 0 && question.words === c.title) && h("p", { class: "t-asked", dir: "auto" }, question.words), h("p", { class: "t-said", dir: "auto" }, said(at))]),
       h("span", { class: "t-meta" }, h("span", { class: "t-level" }, bars(c.level)), when));
   }

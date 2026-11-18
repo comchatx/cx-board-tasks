@@ -29,7 +29,7 @@ It sells **6 a day** and 40 are left:
 - `asks: true` makes the card one that asks: the seller answers it in a field on the card, in their own words. A card without it tells, and the seller ticks it 已读 / Mark as read.
 - The seller may dismiss a card that asks, 忽略 / Dismiss.
 - `level` says how urgent the card is, as the `cx-board` skill says: the Inbox marks each card by it, and a card without it is 常规 / Routine.
-- `questions` makes the card one that asks with options, in place of a field: one line of JSON in the form the platform's option card takes, `comchatx.options/1`, one question or several, or `comchatx.confirm/1` for a yes or a no. The card's title and words stand under the questions under 已处理 / Done; the seller reads the questions first.
+- `questions` makes the card one that asks with options, in place of a field: one line of JSON in the form the platform's option card takes, `comchatx.options/1`, one question or several, or `comchatx.confirm/1` for a yes or a no. Under 已处理 / Done an answered card shows its title, its questions and the seller's answers; its words stay in the file but are not shown there.
 
 ```markdown
 ---
@@ -77,6 +77,6 @@ Twenty units.
 <board from="待办" card="restock-blue-kettle.md"></board>
 ```
 
-On a card with options, the words are the answer alone for one question, or each question over its answer, 未作答 / Not answered for one skipped; 是 / Yes or 否 / No for a yes or a no.
+On a card with options, the words are each question over its answer, 未作答 / Not answered for one skipped; for a yes or a no, the card's question over 是 / Yes or 否 / No.
 
 Read the card's file for what you asked. A message sent while you are working waits until your turn ends.
