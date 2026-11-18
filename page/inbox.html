@@ -72,7 +72,8 @@
   /* The mark's small card is the level's name alone, as the kit's label is drawn: beside its mark, on the mark's own line, where it
      covers the day and no control. */
   .t-card { position: relative; }
-  .t-tip { position: absolute; z-index: 2; white-space: nowrap; padding: var(--space-1) var(--space-4); border: 1px solid var(--float-edge); border-radius: var(--radius); background: var(--raised); color: var(--ink); font-size: var(--size-small); line-height: var(--leading-small); box-shadow: var(--float-shadow); pointer-events: none; transform: translateY(-50%); }
+  .t-tip { position: absolute; z-index: 2; white-space: nowrap; padding: var(--space-1) var(--space-4); border: 1px solid var(--float-edge); border-radius: var(--radius); background: var(--raised); color: var(--ink); font-size: var(--size-small); line-height: var(--leading-small); box-shadow: var(--float-shadow); pointer-events: none; }
+  .entry > .t-tip.t-tip { margin: 0; }
   .unseen { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
   .t-list { display: flex; flex-direction: column; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
   .t-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: var(--space-7); margin-bottom: var(--space-4); }
@@ -97,7 +98,8 @@
   .t-card.t-asks > .t-head { padding-right: calc(var(--space-7) - var(--space-2) + var(--space-4)); min-height: calc(var(--space-7) - var(--space-1)); }
   .t-card.t-asks > .t-mark { position: absolute; top: calc(var(--space-4) - var(--space-1)); right: calc(var(--space-5) - var(--space-2)); margin: 0; }
   /* A card that asks with options: the kit's questionnaire, its heading the question in front, clear of the × at the corner. */
-  .t-form > .kit-asked > .entry-title { padding-right: calc(var(--space-7) - var(--space-2) + var(--space-4)); font-weight: var(--weight-strong); }
+  .t-form > .kit-asked > .entry-title { min-height: calc(var(--space-7) - var(--space-1)); padding-right: calc(var(--space-7) - var(--space-2) + var(--space-4)); font-weight: var(--weight-strong); }
+  .t-form > .kit-asked > .entry-title + .t-meta { margin-top: calc(var(--space-1) - var(--space-4)); }
   .t-reply { display: flex; align-items: center; gap: var(--space-4); }
   .t-reply > .entry-field { flex: 1 1 auto; min-width: 0; }
   .t-reply > button { flex: none; }
@@ -441,6 +443,7 @@
     box.append(tip);
     tip.style.left = `${Math.min(mark.offsetLeft + mark.offsetWidth + 6, box.clientWidth - tip.offsetWidth - 6)}px`;
     tip.style.top = `${mark.offsetTop + mark.offsetHeight / 2}px`;
+    tip.style.transform = "translateY(-50%)";
   }
   /** The line under a card's title: its mark of urgency, then its time. The mark shows what it means as the kit's label does: under the pointer and the keyboard's focus; Escape takes it away. */
   function meta(c) {
