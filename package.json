@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-board-tasks",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Puts what cx found and what needs your answer in your Inbox.",
   "license": "MIT",
   "author": "ComChatX",
@@ -30,6 +30,7 @@
   },
   "comchatx": {
     "name": "Board Inbox",
+    "nameZh": "看板收件箱",
     "about": "cx 的发现和要你决定的事放进收件箱，在那里直接回答。",
     "mark": {
       "line": "clipboard"
