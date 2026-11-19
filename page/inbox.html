@@ -12,14 +12,12 @@
 -->
 <style>
   body.kit { container-type: inline-size; }
-  #page { max-width: 40rem; margin: 0 auto; }
-  /* Where the presses stand, the page is one width whatever the picks, so they do not move; the columns under them keep 40rem each
-     and start at the page's left. Nothing is drawn across a column or between columns. */
-  #page.t-wide { max-width: calc(120rem + 2 * var(--space-7)); }
-  #page.t-c2:not(.t-wide) { max-width: calc(80rem + var(--space-7)); }
-  .t-wide .t-all { max-width: 40rem; }
-  .t-wide.t-c2 .t-all { max-width: calc(80rem + var(--space-7)); }
-  .t-wide.t-c3 .t-all { max-width: none; }
+  /* The page is one width from its first draw, whatever the cards and the picks, so the presses at its head do not move; the columns
+     under them keep 40rem each and start at the page's left. Nothing is drawn across a column or between columns. */
+  #page { max-width: calc(120rem + 2 * var(--space-7)); margin: 0 auto; }
+  .t-all { max-width: 40rem; }
+  .t-c2 .t-all { max-width: calc(80rem + var(--space-7)); }
+  .t-c3 .t-all { max-width: none; }
   .t-all, .t-parts, .t-part { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; margin: 0; }
   .t-part.t-none { display: none; }
   @container (min-width: 41.5rem) {
@@ -277,7 +275,7 @@
   // ---- What the tab holds ----
   const S = { cards: new Map(), view: "now", find: "", whole: new Set(), shown: new Set(), weeks: new Set(), gone: new Map(), menu: undefined, failed: new Set(), busy: new Set(), fields: new Map(), asking: new Map(), drawn: new Map(), drawing: new Set(), ready: false };
   let reading = false, again = false, first = true;
-  /** Done cards known from the picks file and not read: file → the time the board gives it. 已处理, or a card brought into view, reads them. */
+  /** Done cards known from the done list and not read: file → the time the board gives it. 已处理, or a card brought into view, reads them. */
   const unread = new Map();
   let doneWanted = false;
   const wantDone = () => { if (doneWanted) return; doneWanted = true; if (unread.size > 0) void load(); };
@@ -302,7 +300,7 @@
       const now = new Set(listed.map((one) => one.file));
       for (const file of [...read.keys()]) if (!now.has(file)) read.delete(file);
       for (const file of [...unread.keys()]) if (!now.has(file)) unread.delete(file);
-      // A file the picks file holds as done at the time the board gives it is done still: read when 已处理 needs it.
+      // A file the done list holds as done at the time the board gives it is done still: read when 已处理 needs it.
       const skipped = (one) => !doneWanted && !read.has(one.file) && known.get(one.file) === one.modified;
       for (const one of listed) if (skipped(one)) unread.set(one.file, one.modified);
       // What may wait is read first; a file known done, in any folder, after it; each newest first.
@@ -603,12 +601,8 @@
     const { title } = S.gone.get(file);
     return h("li", { "data-for": file }, h("p", { class: "t-gone" }, h("span", { dir: "auto" }, W.gone(title)), h("button", { type: "button", class: "t-quiet", disabled: S.busy.has(file), onclick: () => void undo(file) }, h("span", {}, W.undo()))));
   }
-  /** A view's top bar: its presses and its one button are each kept on their own, so a press on one lands while the other comes or goes. */
-  function top(view, pressed, button) {
-    const bar = keep(`top:${view}`, "", () => h("div", { class: "t-top" }));
-    sync(bar, [keep(`top-picks:${view}`, [pressed, S.menu, P.by, P.in, Kit.lang].join("|"), () => pressed ? controls() : h("span", {})), keep(`top-button:${view}`, Kit.lang, button)]);
-    return bar;
-  }
+  /** A view's top bar, its two presses and its one button, drawn whatever the count of cards. */
+  const top = (view, button) => keep(`top:${view}`, [S.menu, P.by, P.in, Kit.lang].join("|"), () => h("div", { class: "t-top" }, controls(), button()));
   /** One of the two presses: it prints the way in force after its mark; its menu ticks the one in force. */
   function control(pick) {
     const open = S.menu === pick, id = `sort-${pick}`, name = pick === "by" ? W.split() : W.inside();
@@ -637,10 +631,9 @@
     : P.by === "kind" ? [h("span", {}, W.kinds[key]()), h("span", { class: "t-n" }, String(count))]
     : P.by === "time" ? [h("span", {}, W.groups[key]()), h("span", { class: "t-n" }, String(count))]
     : [h("span", { class: "t-level" }, bars(Number(key))), h("span", {}, W.levelWords[Number(key) - 1]()), h("span", { class: "t-n" }, String(count))]);
-  /** The page's width and columns: `n` columns, the presses drawn or not, headings and grounds where there is more than one column. */
-  function lay(n, wide) {
+  /** The page's columns: `n` of them, headings and grounds where there is more than one. The page is one width whatever `n`, so the presses do not move. */
+  function lay(n) {
     for (const k of [2, 3]) page.classList.toggle(`t-c${k}`, n === k);
-    page.classList.toggle("t-wide", wide);
     page.classList.toggle("t-heads", n > 1);
   }
   const headSaid = new WeakMap();
@@ -659,10 +652,9 @@
     const three = P.by !== "kind";
     const both = !three && cols.get("asks").length > 0 && cols.get("tells").length > 0;
     const shown = KEYS[P.by].filter((key) => three || cols.get(key).length > 0);
-    // The presses stand at the head of the page, drawn where two cards or more can change places.
-    const pressed = rest.length > 1;
-    const out = [top("now", pressed, () => quiet("past", W.history(), () => { S.view = "history"; wantDone(); S.gone.clear(); S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); }))];
-    lay(pressed ? (three ? shown.length : both ? 2 : 1) : 1, pressed);
+    // The presses and the columns stand whatever the count of cards.
+    const out = [top("now", () => quiet("past", W.history(), () => { S.view = "history"; wantDone(); S.gone.clear(); S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); }))];
+    lay(three ? shown.length : both ? 2 : 1);
     const column = (key) => {
       const rows = cols.get(key), count = rows.filter((one) => one.counts).length;
       const part = keep(`part:${P.by}:${key}`, "", () => h("section", { class: "t-part" }, h("div", { class: "t-parthead" }, h("h2", { class: "bp-head" })), h("ul", { class: "t-list" })));
@@ -712,14 +704,13 @@
   function historyView() {
     const find = S.find.trim().toLowerCase();
     const all = done();
-    const pressed = all.length > 1;
-    const out = [top("past", pressed, () => quiet("back", W.back(), () => { S.view = "now"; S.find = ""; S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); })),
+    const out = [top("past", () => quiet("back", W.back(), () => { S.view = "now"; S.find = ""; S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); })),
       // The field is one element while 已处理 stands, so the browser keeps its words, caret and selection across a draw.
       keep("find", Kit.lang, () => { const field = h("input", { type: "search", class: "entry-field", "aria-label": W.search(), placeholder: W.search(), autocomplete: "off", value: S.find, oninput: () => { S.find = field.value; draw(); } }); return h("div", { class: "t-find" }, field); })];
     const found = find ? all.filter((c) => c.title.toLowerCase().includes(find)) : all;
     const today = midnight();
     const keys = KEYS[P.by];
-    lay(pressed ? keys.length : 1, pressed);
+    lay(keys.length);
     if (found.length === 0) { if (unread.size === 0) out.push(keep("past-empty", [Boolean(find), Kit.lang].join("|"), () => h("p", { class: "board-empty" }, find ? W.notFound() : W.noneDone()))); return out; }
     const rows = (name, cards) => { const list = keep(name, "", () => h("ul", { class: "t-rows" })); sync(list, cards.map(pastCard)); return list; };
     const column = (key) => {
@@ -741,9 +732,8 @@
       sync(part, [part.firstChild, parts]);
       return part;
     };
-    const one = () => { const part = keep("past-one", "", () => h("section", { class: "t-part" })); sync(part, [rows("past-rows:one", found)]); return part; };
     const box = keep("past-all", "", () => h("div", { class: "t-all" }, h("div", { class: "t-parts" })));
-    sync(box.firstChild, pressed ? keys.map(column) : [one()]);
+    sync(box.firstChild, keys.map(column));
     out.push(box);
     return out;
   }

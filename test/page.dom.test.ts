@@ -556,11 +556,28 @@ it("shows a mark's level in a small card under the pointer, and Escape takes it 
   expect(document.querySelector(".t-tip")).toBeNull();
 });
 
-it("draws the two presses where two cards can change places, none for one card or none, and keeps the pairing picked in inbox.json", async () => {
-  const one = open({ "a.md": TELL });
+it("draws the two presses and the columns in both views with no card, one card or many, and keeps the pairing picked in inbox.json", async () => {
+  const presses = (): (string | null)[] => [...document.querySelectorAll(".t-sortbtn")].map((press) => press.getAttribute("aria-label"));
+  const none = open({});
   await settle();
-  expect(document.querySelector(".t-sortbtn")).toBeNull();
-  expect(document.querySelector(".t-heads")).toBeNull();
+  expect([presses(), document.querySelector(".board-empty") !== null]).toEqual([["Grouping: Type", "Ordering: Urgency"], true]);
+  document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!.click();
+  await settle();
+  expect(presses()).toEqual(["Grouping: Type", "Ordering: Urgency"]);
+  expect(none.board.write).not.toHaveBeenCalled();
+  const one = open({ "a.md": TELL, "d.md": "---\ntitle: Old\ndone: read\ndoneAt: 2026-11-18T08:00:00.000Z\n---\nGone." });
+  await settle();
+  expect([presses(), document.querySelector(".t-heads"), cards()]).toEqual([["Grouping: Type", "Ordering: Urgency"], null, ["Storage fees rose tells"]]);
+  document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!.click();
+  await settle();
+  expect([presses(), document.querySelector(".t-heads"), document.querySelector(".t-done .entry-title")?.textContent]).toEqual([["Grouping: Type", "Ordering: Urgency"], document.getElementById("page"), "Old"]);
+  document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!.click();
+  await settle();
+  document.querySelector<HTMLButtonElement>("#sort-by")!.click();
+  document.querySelectorAll<HTMLButtonElement>("#sort-by-menu [role=menuitemradio]")[2]!.click();
+  await settle();
+  expect([one.held.get("inbox.json")?.text, presses(), document.querySelector(".t-heads"), cards()]).toEqual(['{"by":"time","in":"level"}\n', ["Grouping: Date", "Ordering: Urgency"], document.getElementById("page"), ["Storage fees rose tells"]]);
+  one.board.write.mockClear();
   const made = open({ "a.md": LEVELED("Hot", 3), "b.md": LEVELED("Cold", 1, true), "c.md": LEVELED("Warm", 2) });
   await settle();
   expect(one.board.write).not.toHaveBeenCalled();
@@ -819,6 +836,7 @@ it("keeps the done cards it read in a file of their own, never in inbox.json, an
   expect(made.board.read.mock.calls.map(([file]) => file).sort()).toEqual(["a.md", "inbox-done.json", "inbox.json"]);
   document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!.click();
   await settle();
+  document.querySelector<HTMLButtonElement>(".t-week")!.click();
   expect([made.board.read.mock.calls.map(([file]) => file).filter((file) => file === "d.md"), document.querySelector(".t-done .entry-title")?.textContent]).toEqual([["d.md"], "Old"]);
   expect(made.board.write).not.toHaveBeenCalled();
 });
@@ -900,23 +918,26 @@ it("keeps the stored grouping when its first read of inbox.json is refused, and 
   expect(made.board.read.mock.calls.map(([file]) => file).filter((file) => file.endsWith(".md")).sort()).toEqual(["a.md", "d.md"]);
 });
 
-it("lands a press on the top bar's button while the presses beside it come: 已处理 when a second card arrives, 返回 when a second done row arrives", async () => {
+it("keeps the page's width and the top bar as they were when a second card or a second done row arrives, so a press held on 已处理 or 返回 lands", async () => {
   const made = open({ "a.md": TELL, "d.md": "---\ntitle: Old\ndone: read\ndoneAt: 2026-11-18T08:00:00.000Z\n---\nGone." });
   await settle();
+  const page = document.getElementById("page")!;
+  // The page's width is its stylesheet's one rule for #page: no class it takes sizes it.
+  expect(/<style>([\s\S]*?)<\/style>/.exec(PAGE)![1]!.match(/#page[.:][^{]*\{[^}]*max-width/g)).toBeNull();
   const across = async (file: string, text: string): Promise<void> => {
-    const button = document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!;
+    const button = document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!, bar = button.parentElement, width = page.classList.contains("t-wide");
     button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     made.add(file, text);
     made.tell("files");
     await settle();
     expect(button.isConnected).toBe(true);
+    expect(document.querySelector(".t-top") === bar).toBe(true);
+    expect(page.classList.contains("t-wide")).toBe(width);
     button.click();
     await settle();
   };
-  expect(document.querySelector(".t-ctls")).toBeNull();
   await across("b.md", "---\ntitle: Second\n---\ny\n");
   expect(document.querySelector(".t-done .entry-title")?.textContent).toBe("Old");
-  expect(document.querySelector(".t-ctls")).toBeNull();
   await across("e.md", "---\ntitle: Older\ndone: read\ndoneAt: 2026-11-17T08:00:00.000Z\n---\nGone.");
   expect([document.querySelector(".t-done"), cards().sort()]).toEqual([null, ["Second tells", "Storage fees rose tells"]]);
 });
