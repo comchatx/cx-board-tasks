@@ -34,11 +34,12 @@ function stand(files: Record<string, string>) {
   return { board, held, refuse, asked, tell, add: (file: string, text: string) => { held.set(file, { text, modified: clock++ }); } };
 }
 
-function open(files: Record<string, string>, locale = "en"): Board {
+function open(files: Record<string, string>, locale = "en", asks: Record<string, unknown> = {}): Board {
   document.documentElement.dataset["locale"] = locale;
   document.body.className = "kit";
   document.body.innerHTML = BODY;
   const made = stand(files);
+  Object.assign(made.board, asks);
   Object.defineProperty(window, "cxBoard", { configurable: true, value: made.board });
   new Function(KIT)();
   new Function(SCRIPT)();
@@ -408,4 +409,125 @@ it("reads every card it does not hold at once, not one after another", async () 
   g.release();
   await settle();
   expect(cards()).toHaveLength(3);
+});
+
+it("draws a card's words as cx's answers in the chat are, by the board's markdown ask, and as paragraphs until it answers, where it refuses, or where the board has none", async () => {
+  const LISTED = "---\ntitle: Profit this week\n---\n\n**Profit** by store:\n\n- US $1,284\n- UK £310\n";
+  const drawnBy = vi.fn(async (text: string) => `<p><strong>drawn</strong> ${text.length}</p>`);
+  const made = open({ "a.md": LISTED, "b.md": ASK }, "en", { markdown: drawnBy });
+  await settle();
+  const body = (file: string): HTMLElement => cardOf(file).querySelector<HTMLElement>(".t-words")!;
+  expect(drawnBy.mock.calls.map(([text]) => text).sort()).toEqual(["\n**Profit** by store:\n\n- US $1,284\n- UK £310\n", "\nIt sells 6 a day.\n\n40 are left.\n"].sort());
+  expect([body("a.md").classList.contains("markdown"), body("a.md").innerHTML]).toEqual([true, `<p><strong>drawn</strong> ${"\n**Profit** by store:\n\n- US $1,284\n- UK £310\n".length}</p>`]);
+  // Drawn once a version: another drawing asks nothing more; a file written since is asked again.
+  made.tell("context", { width: 500 });
+  await settle();
+  expect(drawnBy).toHaveBeenCalledTimes(2);
+  made.add("a.md", LISTED.replace("1,284", "1,300"));
+  made.tell("files");
+  await settle();
+  expect(drawnBy).toHaveBeenCalledTimes(3);
+  // A refusal leaves the words as paragraphs, and is not asked again until the file changes.
+  drawnBy.mockRejectedValueOnce(new Error("too_large"));
+  made.add("a.md", LISTED);
+  made.tell("files");
+  await settle();
+  expect([body("a.md").classList.contains("markdown"), [...body("a.md").querySelectorAll("p")].map((one) => one.textContent)]).toEqual([false, ["**Profit** by store:", "- US $1,284 - UK £310"]]);
+  made.tell("context", { width: 600 });
+  await settle();
+  expect(drawnBy).toHaveBeenCalledTimes(4);
+});
+
+it("asks for a card's drawing again a second after the frame turns it away as busy, and draws paragraphs on a board with no markdown ask", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  const drawnBy = vi.fn(async () => "<p>drawn</p>");
+  drawnBy.mockRejectedValueOnce(new Error("busy"));
+  open({ "b.md": ASK }, "en", { markdown: drawnBy });
+  await settle();
+  expect(cardOf("b.md").querySelector(".t-words")!.classList.contains("markdown")).toBe(false);
+  await vi.advanceTimersByTimeAsync(1000);
+  await settle();
+  expect([drawnBy.mock.calls.length, cardOf("b.md").querySelector(".t-words")!.innerHTML]).toEqual([2, "<p>drawn</p>"]);
+  vi.useRealTimers();
+  open({ "b.md": ASK });
+  await settle();
+  expect([...cardOf("b.md").querySelectorAll(".t-words > p")].map((one) => one.textContent)).toEqual(["It sells 6 a day.", "40 are left."]);
+});
+
+it("draws a done card's words by the same drawing when its row is opened", async () => {
+  const made = open({ "a.md": "---\ntitle: Storage fees rose\ndone: read\n---\n\nUp **$41.20**.\n" }, "en", { markdown: vi.fn(async () => "<p>Up <strong>$41.20</strong>.</p>") });
+  await settle();
+  made.tell("focus", "a.md");
+  await settle();
+  expect(document.querySelector(".t-past .t-past-words.markdown strong")?.textContent).toBe("$41.20");
+});
+
+it("says the answer field's placeholder in the page's language as it is now, not as it was when the field was made", async () => {
+  const made = open({ "b.md": ASK });
+  await settle();
+  expect(cardOf("b.md").querySelector("input")!.placeholder).toBe("Answer cx");
+  document.documentElement.dataset["locale"] = "zh";
+  made.tell("context", { locale: "zh" });
+  await settle();
+  expect(cardOf("b.md").querySelector("input")!.placeholder).toBe("回答 cx");
+});
+
+/**
+ * The frame's bound on a page's asks, as the platform's proxy holds it: at most 32 out at once across every verb, any past them refused
+ * `busy`; each answer comes a few milliseconds later, as across the frame.
+ */
+function bounded(made: Board, asks: Record<string, (...given: never[]) => Promise<unknown>>): { most: () => number; refused: string[] } {
+  let out = 0, most = 0;
+  const refused: string[] = [];
+  const all = { ...asks };
+  for (const verb of ["list", "read", "write", "send", "count", "show"] as const) all[verb] = made.board[verb].getMockImplementation() as never;
+  for (const [verb, answer] of Object.entries(all)) {
+    const one = async (...given: never[]): Promise<unknown> => {
+      if (out >= 32) { refused.push(verb); throw new Error("busy"); }
+      out += 1; most = Math.max(most, out);
+      try { await new Promise((done) => setTimeout(done, 5)); return await answer(...given); } finally { out -= 1; }
+    };
+    if (verb in made.board && vi.isMockFunction((made.board as Record<string, unknown>)[verb])) (made.board as unknown as Record<string, { mockImplementation: (fn: unknown) => void }>)[verb]!.mockImplementation(one);
+    else Object.assign(made.board, { [verb]: one });
+  }
+  return { most: () => most, refused };
+}
+
+it("leaves the frame's asks room for the icon's count with forty cards waiting, drawing their words a few at a time, and counts all forty", async () => {
+  const files = Object.fromEntries(Array.from({ length: 40 }, (_, n) => [`f${String(n).padStart(2, "0")}.md`, `---\ntitle: Card ${n}\n---\n\n**${n}** left.\n`]));
+  document.documentElement.dataset["locale"] = "en";
+  document.body.className = "kit";
+  document.body.innerHTML = BODY;
+  const made = stand(files);
+  const asks = bounded(made, { markdown: async (text: string) => `<p>${text.trim()}</p>` });
+  Object.defineProperty(window, "cxBoard", { configurable: true, value: made.board });
+  new Function(KIT)();
+  new Function(SCRIPT)();
+  await vi.waitFor(() => expect(document.querySelectorAll(".t-card .t-words.markdown")).toHaveLength(40), { timeout: 4000 });
+  const counts = made.asked.filter(([verb]) => verb === "count").map(([, n]) => n);
+  expect([counts.at(-1), asks.refused.filter((verb) => verb === "count"), asks.most() <= 32]).toEqual([40, [], true]);
+});
+
+it("asks for the count again at the next drawing when the board refused it, and only then holds it as told", async () => {
+  const made = open({ "b.md": ASK });
+  const answer = made.board.count.getMockImplementation()!;
+  made.board.count.mockImplementation(async (n, words) => { if (n === 1 && made.board.count.mock.calls.filter(([one]) => one === 1).length === 1) throw new Error("busy"); return answer(n, words); });
+  await settle();
+  const told = (): number => made.board.count.mock.calls.filter(([n]) => n === 1).length;
+  const before = told();
+  made.tell("context", { width: 500 });
+  await settle();
+  const after = told();
+  made.tell("context", { width: 600 });
+  await settle();
+  expect([before, after, told()]).toEqual([1, 2, 2]);
+});
+
+it("keeps a card's words as text where the board's drawing answers anything but text", async () => {
+  for (const answer of [null, false, 17, ["<img src=x>"], { html: "<b>x</b>" }]) {
+    open({ "b.md": ASK }, "en", { markdown: vi.fn(async () => answer) });
+    await settle();
+    const words = cardOf("b.md").querySelector(".t-words")!;
+    expect([String(answer), words.classList.contains("markdown"), [...words.querySelectorAll("p")].map((one) => one.textContent), words.querySelector("img")]).toEqual([String(answer), false, ["It sells 6 a day.", "40 are left."], null]);
+  }
 });

@@ -30,6 +30,9 @@
   .t-words.cut { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
   .t-words.cut > p { display: inline; }
   .t-words.cut > p + p::before { content: " "; }
+  .t-words.markdown, .t-past-words.markdown { margin-bottom: 0; }
+  .t-past-words > p { margin: 0; overflow-wrap: anywhere; }
+  .t-past-words > p + p { margin-top: var(--space-3); }
   .entry.t-card > .t-more { margin-top: 0; }
   .t-card.t-asks { position: relative; }
   .t-card.t-asks > .t-head { padding-right: calc(var(--space-7) - var(--space-2) + var(--space-4)); min-height: calc(var(--space-7) - var(--space-1)); }
@@ -116,11 +119,12 @@
     const { keys, body } = front(text);
     const heading = /^[ \t]*#{1,6}[ \t]+(.+?)[ \t#]*$/m.exec(body);
     const title = (keys.get("title") || (heading ? heading[1] : "") || file.split("/").pop().replace(/\.md$/i, "")).replace(/\s+/g, " ").trim();
-    const words = (keys.get("title") || heading === null ? body : body.slice(0, heading.index) + body.slice(heading.index + heading[0].length))
+    const rest = keys.get("title") || heading === null ? body : body.slice(0, heading.index) + body.slice(heading.index + heading[0].length);
+    const words = rest
       .split(/\r?\n[ \t]*\r?\n/).map((one) => one.replace(/\s+/g, " ").trim()).filter((one) => one !== "");
     const done = DONE.has(keys.get("done")) ? keys.get("done") : undefined;
     const at = Date.parse(keys.get("doneAt") ?? "");
-    return { file, modified, text, title, words, asks: keys.get("asks") === "true" || ASKING.has(keys.get("kind")), reply: keys.get("reply") === "true", done, doneAt: Number.isFinite(at) ? at : modified, answer: keys.get("answer") };
+    return { file, modified, text, title, words, body: rest, asks: keys.get("asks") === "true" || ASKING.has(keys.get("kind")), reply: keys.get("reply") === "true", done, doneAt: Number.isFinite(at) ? at : modified, answer: keys.get("answer") };
   }
   /** The file with its marks set, every other line and byte as it was; `undefined` takes them out. */
   function marked(text, mark) {
@@ -132,11 +136,11 @@
   }
 
   // ---- What the tab holds ----
-  const S = { cards: new Map(), view: "now", find: "", whole: new Set(), shown: new Set(), weeks: new Set(), gone: new Map(), failed: new Set(), busy: new Set(), fields: new Map() };
+  const S = { cards: new Map(), view: "now", find: "", whole: new Set(), shown: new Set(), weeks: new Set(), gone: new Map(), failed: new Set(), busy: new Set(), fields: new Map(), drawn: new Map(), drawing: new Set() };
   let reading = false, again = false, first = true;
   const pause = (ms) => new Promise((done) => setTimeout(done, ms));
   // Half the frame's 32 asks out at once, so the page's other asks (its count, a write) find room beside a wave.
-  const WAVE = 16, OWED = new Set(["too_often", "busy"]);
+  const WAVE = 16, DRAWING = 8, OWED = new Set(["too_often", "busy"]);
   /**
    * The tab read again: its list, then every Markdown file not read at the time the list gives it, waiting ones first, `WAVE` at once.
    * The frame holds at most 32 of a page's asks out at once (`busy`) and the board takes them in a bucket of 32 and ten a second
@@ -255,13 +259,38 @@
   }
   const markPress = (glyph, word, name, press, off) => h("button", { type: "button", class: "t-mark", title: word, "aria-label": name, disabled: off, onclick: press }, icon(...GLYPH[glyph]));
   const quiet = (glyph, words, press) => h("button", { type: "button", class: "t-quiet", onclick: press }, glyph && icon(...GLYPH[glyph]), h("span", {}, words));
+  /**
+   * A card's words drawn as cx's answers in the chat are, by the board's `cxBoard.markdown`; until its answer comes, and where the board
+   * has no such ask, refuses it or answers anything but text, the words stand as paragraphs. An ask the frame turns away as `busy` is asked
+   * again a second later. At most `DRAWING` are out at once, the rest asked as those end, so the frame's 32 asks out keep room for the
+   * tab's reads, the icon's count and the seller's presses.
+   */
+  function wordsOf(c, attrs) {
+    const drawn = S.drawn.get(c.file);
+    if (drawn?.modified === c.modified && drawn.html !== null) {
+      const box = h("div", { ...attrs, class: `${attrs.class ?? ""} markdown`.trim() });
+      box.innerHTML = drawn.html;
+      return box;
+    }
+    if (drawn?.modified !== c.modified && !S.drawing.has(c.file) && S.drawing.size < DRAWING && typeof board.markdown === "function") {
+      S.drawing.add(c.file);
+      const at = c.modified;
+      const end = () => { S.drawing.delete(c.file); draw(); };
+      board.markdown(c.body).then((html) => { S.drawn.set(c.file, { modified: at, html: typeof html === "string" ? html : null }); end(); }, (error) => {
+        if (error?.message === "busy") { setTimeout(end, 1000); return; }
+        S.drawn.set(c.file, { modified: at, html: null });
+        end();
+      });
+    }
+    return h("div", attrs, c.words.map((line) => h("p", { dir: "auto" }, line)));
+  }
   function card(c) {
     const whole = S.whole.has(c.file), busy = S.busy.has(c.file), id = idOf(c.file);
     const failed = S.failed.has(c.file);
-    const words = h("div", { class: `t-words entry-body${whole ? "" : " cut"}`, dir: "auto" }, c.words.map((line) => h("p", {}, line)));
+    const words = wordsOf(c, { class: `t-words entry-body${whole ? "" : " cut"}`, dir: "auto" });
     const more = h("button", { type: "button", class: "t-quiet t-more", "aria-expanded": String(whole), hidden: !whole, onclick: () => { if (whole) S.whole.delete(c.file); else S.whole.add(c.file); draw(); document.getElementById(id)?.querySelector(".t-more")?.focus(); } }, h("span", {}, whole ? W.less() : W.more()));
     const field = c.asks && fieldOf(c.file);
-    if (field) { field.disabled = busy; field.setAttribute("aria-label", W.replyTo(c.title)); if (failed) field.setAttribute("aria-describedby", `${id}-fail`); else field.removeAttribute("aria-describedby"); }
+    if (field) { field.disabled = busy; field.placeholder = W.reply(); field.setAttribute("aria-label", W.replyTo(c.title)); if (failed) field.setAttribute("aria-describedby", `${id}-fail`); else field.removeAttribute("aria-describedby"); }
     // An asking card's × comes after its answer and Send, so Tab meets them first; it is drawn at the card's corner all the same.
     return h("li", {}, h("article", { class: `entry t-card${c.asks ? " t-asks" : ""}`, id, tabindex: "-1", "data-file": c.file },
       h("div", { class: "t-head" },
@@ -297,7 +326,7 @@
     return h("li", { id },
       h("button", { type: "button", class: "t-row", "aria-expanded": String(open), onclick: () => { if (open) S.shown.delete(c.file); else S.shown.add(c.file); draw(); document.getElementById(id)?.querySelector("button")?.focus(); } },
         h("span", { class: "entry-title", dir: "auto" }, c.title), h("span", { class: "t-when" }, W.at(W.how[c.done](), day(c.doneAt)))),
-      open && h("div", { class: "t-past" }, c.words.map((line) => h("p", { dir: "auto" }, line)), c.done === "answered" && c.answer && h("p", { class: "t-yours", dir: "auto" }, `${W.you()}${w(": ", "：")}${c.answer}`)));
+      open && h("div", { class: "t-past" }, wordsOf(c, { class: "t-past-words", dir: "auto" }), c.done === "answered" && c.answer && h("p", { class: "t-yours", dir: "auto" }, `${W.you()}${w(": ", "：")}${c.answer}`)));
   }
   const DAY = 24 * 60 * 60 * 1000;
   const midnight = () => { const today = new Date(); today.setHours(0, 0, 0, 0); return today.getTime(); };
@@ -327,7 +356,8 @@
     }
     return out;
   }
-  let counted;
+  // The count the board holds, set once it is answered; one refused is asked again at the next drawing.
+  let counted, counting;
   function draw() {
     const typing = document.activeElement?.matches?.(".t-card input") ? document.activeElement : undefined;
     const held = typing === undefined && document.activeElement?.matches?.(".t-card, .t-row") ? document.activeElement.closest("[id]")?.id : undefined;
@@ -341,7 +371,11 @@
     const list = waiting();
     const asks = list.filter((c) => c.asks).length, tells = list.length - asks;
     const words = W.count(asks, tells);
-    if (counted !== `${asks + tells} ${words}`) { counted = `${asks + tells} ${words}`; void board.count(asks + tells, words || null).catch(() => {}); }
+    const said = `${asks + tells} ${words}`;
+    if (counted !== said && counting !== said) {
+      counting = said;
+      board.count(asks + tells, words || null).then(() => { counted = said; }, () => {}).finally(() => { if (counting === said) counting = undefined; });
+    }
   }
 
   board.on("files", () => void load());
