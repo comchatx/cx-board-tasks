@@ -822,3 +822,48 @@ it("keeps the done cards it read in inbox.json, and a later page reads a done ca
   expect([made.board.read.mock.calls.map(([file]) => file).filter((file) => file === "d.md"), document.querySelector(".t-done .entry-title")?.textContent]).toEqual([["d.md"], "Old"]);
   expect(made.board.write).not.toHaveBeenCalled();
 });
+
+it("lands a press held across a files notice between its down and its up: the button pressed is still the one drawn, on a card and on the top bar, in both views", async () => {
+  const made = open({ "a.md": TELL, "b.md": "---\ntitle: Second\n---\ny\n" });
+  await settle();
+  let more = 0;
+  const across = async (button: HTMLButtonElement): Promise<void> => {
+    button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    made.add(`new-${more++}.md`, "---\ntitle: Third\n---\nz\n");
+    made.tell("files");
+    await settle();
+    expect(button.isConnected).toBe(true);
+    button.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    button.click();
+    await settle();
+  };
+  await across(cardOf("a.md").querySelector<HTMLButtonElement>(".t-mark")!);
+  expect(made.held.get("a.md")!.text).toContain("\ndone: read\n");
+  await across(document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!);
+  expect(document.querySelector(".t-done .entry-title")?.textContent).toBe("Storage fees rose");
+  await across(document.querySelector<HTMLButtonElement>(".t-done .t-open")!);
+  expect(document.querySelector(".t-done .t-open")!.getAttribute("aria-expanded")).toBe("true");
+  await across(document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!);
+  expect([document.querySelector(".t-done"), cards().sort()]).toEqual([null, ["Second tells", ...Array.from({ length: 4 }, () => "Third tells")]]);
+});
+
+it("draws 已处理's rows as their files come, newest first, with no line saying nothing is done while they are read", async () => {
+  const files = Object.fromEntries(Array.from({ length: 20 }, (_, n) => [`d${String(n).padStart(2, "0")}.md`, `---\ntitle: Done ${n}\ndone: read\ndoneAt: 2026-11-18T08:00:00.000Z\n---\nx\n`]));
+  const first = open({ "a.md": TELL, ...files });
+  await settle();
+  const made = open({ "a.md": TELL, ...files, "inbox.json": first.held.get("inbox.json")!.text });
+  await settle();
+  const read = made.board.read.getMockImplementation()!;
+  let release: () => void = () => {};
+  const rest = new Promise<void>((done) => { release = done; });
+  let reads = 0;
+  made.board.read.mockImplementation(async (file) => { if (file.startsWith("d") && reads++ >= 16) await rest; return await read(file); });
+  const titles = (): string[] => [...document.querySelectorAll(".t-done .entry-title")].map((one) => one.textContent ?? "").sort();
+  document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!.click();
+  expect([titles(), document.querySelector(".board-empty")]).toEqual([[], null]);
+  await settle();
+  expect([titles(), document.querySelector(".board-empty")]).toEqual([Array.from({ length: 16 }, (_, n) => `Done ${n + 4}`).sort(), null]);
+  release();
+  await settle();
+  expect(titles()).toHaveLength(20);
+});

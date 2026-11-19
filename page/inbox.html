@@ -288,7 +288,7 @@
       await picked;
       const now = new Set(listed.map((one) => one.file));
       for (const file of [...read.keys()]) if (!now.has(file)) read.delete(file);
-      unread.clear();
+      for (const file of [...unread.keys()]) if (!now.has(file)) unread.delete(file);
       // A file the picks file holds as done at the time the board gives it is done still: read when 已处理 needs it.
       const skipped = (one) => !doneWanted && !read.has(one.file) && known.get(one.file) === one.modified;
       for (const one of listed) if (skipped(one)) unread.set(one.file, one.modified);
@@ -298,6 +298,9 @@
         const wave = left.slice(0, WAVE);
         const said = await Promise.allSettled(wave.map((one) => board.read(one.file)));
         said.forEach((one, at) => { if (one.status === "fulfilled") read.set(wave[at].file, readCard(wave[at].file, wave[at].modified, one.value)); });
+        // 已处理 waiting on its files draws each wave's done cards as they come, newest first; what waits is drawn once the read is whole.
+        const came = wave.filter((one, at) => said[at].status === "fulfilled" && unread.delete(one.file) && read.get(one.file).done !== undefined);
+        if (came.length > 0 && S.ready && S.view === "history") { for (const one of came) S.cards.set(one.file, read.get(one.file)); draw(); }
         const owed = wave.filter((_, at) => said[at].status === "rejected" && OWED.has(said[at].reason?.message));
         left = [...owed, ...left.slice(WAVE)];
         if (owed.length > 0) await pause(1000);
@@ -513,9 +516,7 @@
       return keep(`card:${c.file}`, [c.modified, asked.n, S.busy.has(c.file), S.failed.has(c.file)].join("|"), () => askingCard(c));
     }
     askWords(c);
-    const drawn = S.drawn.get(c.file);
-    const words = drawn?.modified !== c.modified ? "-" : drawn.html === null ? "p" : "m";
-    return keep(`card:${c.file}`, [c.modified, Kit.lang, S.whole.has(c.file), S.busy.has(c.file), S.failed.has(c.file), words].join("|"), () => cardOf(c));
+    return keep(`card:${c.file}`, [c.modified, Kit.lang, S.whole.has(c.file), S.busy.has(c.file), S.failed.has(c.file), drawnOf(c)].join("|"), () => cardOf(c));
   }
   function cardOf(c) {
     const whole = S.whole.has(c.file), busy = S.busy.has(c.file), id = idOf(c.file);
@@ -665,7 +666,10 @@
     return out;
   }
   /** A card of 已处理: its title the press that opens it; a question said once, its answer under it; the day, what was done and the mark at its foot. */
-  function pastCard(c) {
+  /** Whether a card's words are drawn by the board yet: none asked or come (-), refused (p), drawn (m). */
+  const drawnOf = (c) => { const drawn = S.drawn.get(c.file); return drawn?.modified !== c.modified ? "-" : drawn.html === null ? "p" : "m"; };
+  const pastCard = (c) => (S.shown.has(c.file) && c.form === undefined && askWords(c), keep(`past:${c.file}`, [c.modified, S.shown.has(c.file), S.shown.has(c.file) ? drawnOf(c) : "", Kit.lang].join("|"), () => pastOf(c)));
+  function pastOf(c) {
     const open = S.shown.has(c.file), id = idOf(c.file);
     // An answer kept in no shape of its form is no answer of the form's: the card is drawn from its words, as one without `answers` is.
     const asForm = c.form !== undefined && !(c.done === "answered" && c.answers === undefined);
@@ -687,32 +691,42 @@
   const weekOf = (c) => Math.floor((agoOf(c) - 8) / 7);
   /** 已处理 in columns by the page's own two picks: the presses where they stood, 返回 where 已处理 stood, the search field under them. */
   function historyView() {
-    const field = h("input", { type: "search", class: "entry-field", "aria-label": W.search(), placeholder: W.search(), autocomplete: "off", value: S.find, oninput: () => { S.find = field.value; draw(); const again = document.querySelector("input[type=search]"); again?.focus(); again?.setSelectionRange(S.find.length, S.find.length); } });
-    const back = quiet("back", W.back(), () => { S.view = "now"; S.find = ""; S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); });
     const find = S.find.trim().toLowerCase();
     const all = done();
     const pressed = all.length > 1;
-    const out = [top(pressed ? controls() : h("span", {}), back), h("div", { class: "t-find" }, field)];
+    const out = [keep("top:past", [pressed, S.menu, P.by, P.in, Kit.lang].join("|"), () => top(pressed ? controls() : h("span", {}),
+      quiet("back", W.back(), () => { S.view = "now"; S.find = ""; S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); }))),
+      // The field is one element while 已处理 stands, so the browser keeps its words, caret and selection across a draw.
+      keep("find", Kit.lang, () => { const field = h("input", { type: "search", class: "entry-field", "aria-label": W.search(), placeholder: W.search(), autocomplete: "off", value: S.find, oninput: () => { S.find = field.value; draw(); } }); return h("div", { class: "t-find" }, field); })];
     const found = find ? all.filter((c) => c.title.toLowerCase().includes(find)) : all;
     const today = midnight();
     const keys = KEYS[P.by];
     lay(pressed ? keys.length : 1, pressed);
-    if (found.length === 0) { if (unread.size === 0) out.push(h("p", { class: "board-empty" }, find ? W.notFound() : W.noneDone())); return out; }
+    if (found.length === 0) { if (unread.size === 0) out.push(keep("past-empty", [Boolean(find), Kit.lang].join("|"), () => h("p", { class: "board-empty" }, find ? W.notFound() : W.noneDone()))); return out; }
+    const rows = (name, cards) => { const list = keep(name, "", () => h("ul", { class: "t-rows" })); sync(list, cards.map(pastCard)); return list; };
     const column = (key) => {
       const mine = found.filter((c) => keyOf(P.by, c, c.doneAt) === key).sort((a, b) => FIRST[P.in](a, b) || b.doneAt - a.doneAt);
       const recent = find ? mine : mine.filter((c) => agoOf(c) <= 7), older = find ? [] : mine.filter((c) => agoOf(c) > 7);
-      const parts = [recent.length > 0 && h("ul", { class: "t-rows" }, recent.map(pastCard))];
+      const parts = [recent.length > 0 && rows(`past-rows:${P.by}:${key}`, recent)];
       // A column folds its own older weeks, so no week's row runs across the page.
       for (const k of [...new Set(older.map(weekOf))]) {
         const cards = older.filter((c) => weekOf(c) === k), name = `${key}:${k}`, id = `w-${key}-${k}`, open = S.weeks.has(name);
         const from = today - (14 + 7 * k) * DAY, to = today - (8 + 7 * k) * DAY;
-        parts.push(h("button", { type: "button", class: "t-week", id, "aria-expanded": String(open), onclick: () => { if (open) S.weeks.delete(name); else S.weeks.add(name); draw(); document.getElementById(id)?.focus(); } },
-          h("span", {}, `${day(from)}–${day(to)}`), h("span", {}, W.items(cards.length))));
-        if (open) parts.push(h("ul", { class: "t-rows" }, cards.map(pastCard)));
+        parts.push(keep(`week:${P.by}:${name}`, [open, cards.length, from, Kit.lang].join("|"), () => h("button", { type: "button", class: "t-week", id, "aria-expanded": String(open), onclick: () => { if (open) S.weeks.delete(name); else S.weeks.add(name); draw(); document.getElementById(id)?.focus(); } },
+          h("span", {}, `${day(from)}–${day(to)}`), h("span", {}, W.items(cards.length)))));
+        if (open) parts.push(rows(`week-rows:${P.by}:${name}`, cards));
       }
-      return h("section", { class: `t-part${mine.length === 0 ? " t-none" : ""}` }, h("div", { class: "t-parthead" }, h("h2", { class: "bp-head" }, headOf(key, mine.length, true))), parts);
+      const part = keep(`past-part:${P.by}:${key}`, "", () => h("section", { class: "t-part" }, h("div", { class: "t-parthead" }, h("h2", { class: "bp-head" }))));
+      part.classList.toggle("t-none", mine.length === 0);
+      const head = part.firstChild.firstChild, said = [P.by, key, mine.length, Kit.lang, "past"].join("|");
+      if (headSaid.get(head) !== said) { headSaid.set(head, said); head.replaceChildren(...[headOf(key, mine.length, true)].flat()); }
+      sync(part, [part.firstChild, parts]);
+      return part;
     };
-    out.push(h("div", { class: "t-all" }, h("div", { class: "t-parts" }, (pressed ? keys : [keys.find((key) => found.some((c) => keyOf(P.by, c, c.doneAt) === key))]).map(pressed ? column : () => h("section", { class: "t-part" }, h("ul", { class: "t-rows" }, found.map(pastCard)))))));
+    const one = () => { const part = keep("past-one", "", () => h("section", { class: "t-part" })); sync(part, [rows("past-rows:one", found)]); return part; };
+    const box = keep("past-all", "", () => h("div", { class: "t-all" }, h("div", { class: "t-parts" })));
+    sync(box.firstChild, pressed ? keys.map(column) : [one()]);
+    out.push(box);
     return out;
   }
   // The count the board holds, set once it is answered; one refused is asked again at the next drawing.
