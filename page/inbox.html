@@ -242,22 +242,32 @@
   const KEYS = { kind: ["asks", "tells"], level: ["3", "2", "1"], time: ["today", "three", "older"] };
   const PICKS = "inbox.json";
   const P = { by: "kind", in: "level" };
+  /** The done cards the page has read, by file and the time the board gives it: a later page reads them only once 已处理 needs them. */
+  const known = new Map();
+  let knownSaid = "{}";
   function readPicks(text) {
     const kept = json(text);
+    if (kept?.done !== null && typeof kept?.done === "object") for (const [file, at] of Object.entries(kept.done)) if (typeof at === "number") known.set(file, at);
+    knownSaid = JSON.stringify(kept?.done ?? {});
     if (!WAYS.includes(kept?.by)) return;
     P.by = kept.by;
     P.in = WAYS.includes(kept.in) && kept.in !== kept.by ? kept.in : IN_FOR[kept.by];
   }
   // Read beside the tab's first read, never before it; a tab without the file, or one it cannot read, has the default pairing.
   const picked = board.read(PICKS).then(readPicks, () => {});
+  const writePicks = () => { knownSaid = JSON.stringify(Object.fromEntries(known)); void board.write(PICKS, `${JSON.stringify({ by: P.by, in: P.in, ...(known.size > 0 ? { done: Object.fromEntries(known) } : {}) })}\n`).catch(() => {}); };
   function choose(pick, to) {
     if (pick === "by") { P.by = to; if (P.in === to) P.in = IN_FOR[to]; } else P.in = to;
-    void board.write(PICKS, `${JSON.stringify({ by: P.by, in: P.in })}\n`).catch(() => {});
+    writePicks();
   }
 
   // ---- What the tab holds ----
   const S = { cards: new Map(), view: "now", find: "", whole: new Set(), shown: new Set(), weeks: new Set(), gone: new Map(), menu: undefined, failed: new Set(), busy: new Set(), fields: new Map(), asking: new Map(), drawn: new Map(), drawing: new Set(), ready: false };
   let reading = false, again = false, first = true;
+  /** Done cards known from the picks file and not read: file → the time the board gives it. 已处理, or a card brought into view, reads them. */
+  const unread = new Map();
+  let doneWanted = false;
+  const wantDone = () => { if (doneWanted) return; doneWanted = true; if (unread.size > 0) void load(); };
   const pause = (ms) => new Promise((done) => setTimeout(done, ms));
   // Half the frame's 32 asks out at once, so the page's other asks (its count, a write) find room beside a wave.
   const WAVE = 16, DRAWING = 8, OWED = new Set(["too_often", "busy"]);
@@ -275,9 +285,14 @@
     let listed;
     try {
       listed = (await board.list()).filter((one) => /\.md$/i.test(one.file));
+      await picked;
       const now = new Set(listed.map((one) => one.file));
       for (const file of [...read.keys()]) if (!now.has(file)) read.delete(file);
-      const stale = listed.filter((one) => read.get(one.file)?.modified !== one.modified)
+      unread.clear();
+      // A file the picks file holds as done at the time the board gives it is done still: read when 已处理 needs it.
+      const skipped = (one) => !doneWanted && !read.has(one.file) && known.get(one.file) === one.modified;
+      for (const one of listed) if (skipped(one)) unread.set(one.file, one.modified);
+      const stale = listed.filter((one) => !skipped(one) && read.get(one.file)?.modified !== one.modified)
         .sort((a, b) => Number(/^done\//.test(a.file)) - Number(/^done\//.test(b.file)) || b.modified - a.modified);
       for (let left = stale; left.length > 0;) {
         const wave = left.slice(0, WAVE);
@@ -296,6 +311,10 @@
       for (const file of [...S.cards.keys()]) if (!read.has(file)) { S.fields.delete(file); S.asking.delete(file); }
       S.cards = read;
       S.ready = true;
+      known.clear();
+      for (const c of read.values()) if (c.done !== undefined) known.set(c.file, c.modified);
+      for (const [file, at] of unread) known.set(file, at);
+      if (JSON.stringify(Object.fromEntries(known)) !== knownSaid) writePicks();
     }
     // A card this read brought that the page did not hold asks for the board, by the card's own name; the first read asks for none.
     const fresh = first ? [] : [...S.cards.values()].filter((c) => c.done === undefined && !held.has(c.file)).sort((a, b) => b.modified - a.modified);
@@ -395,6 +414,26 @@
   }
 
   // ---- Drawing ----
+  /**
+   * A draw builds again only what changed. An element is kept by its name with the key of what it shows; a list's children are made the
+   * new ones in place, what left taken out first, so a card that stays is neither built nor moved and its fold is not measured again.
+   */
+  const kept = new Map();
+  let keeping = new Set();
+  function keep(name, key, make) {
+    keeping.add(name);
+    const was = kept.get(name);
+    if (was !== undefined && was.key === key) return was.el;
+    const el = make();
+    kept.set(name, { key, el });
+    return el;
+  }
+  function sync(parent, children) {
+    const want = children.flat(Infinity).filter((one) => one !== undefined && one !== null && one !== false);
+    const staying = new Set(want);
+    for (const one of [...parent.childNodes]) if (!staying.has(one)) one.remove();
+    want.forEach((one, at) => { if (parent.childNodes[at] !== one) parent.insertBefore(one, parent.childNodes[at] ?? null); });
+  }
   const idOf = (file) => `c-${[...new TextEncoder().encode(file)].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
   const status = h("p", { class: "unseen", role: "status" });
   const sayIt = (words) => { status.textContent = ""; setTimeout(() => { status.textContent = words; }, 50); };
@@ -418,6 +457,11 @@
       box.innerHTML = drawn.html;
       return box;
     }
+    askWords(c);
+    return h("div", attrs, c.words.map((line) => h("p", { dir: "auto" }, line)));
+  }
+  function askWords(c) {
+    const drawn = S.drawn.get(c.file);
     if (drawn?.modified !== c.modified && !S.drawing.has(c.file) && S.drawing.size < DRAWING && typeof board.markdown === "function") {
       S.drawing.add(c.file);
       const at = c.modified;
@@ -428,7 +472,6 @@
         end();
       });
     }
-    return h("div", attrs, c.words.map((line) => h("p", { dir: "auto" }, line)));
   }
 
   // ---- The mark of urgency and its small card ----
@@ -462,8 +505,19 @@
     return h("div", { class: "t-meta" }, mark, when);
   }
 
+  /** A waiting card's element, built again when its file, the language, its fold, a press on it or the drawing of its words changed. */
   function card(c) {
-    if (c.form !== undefined) return askingCard(c);
+    if (c.form !== undefined) {
+      let asked = S.asking.get(c.file);
+      if (asked === undefined || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c));
+      return keep(`card:${c.file}`, [c.modified, asked.n, S.busy.has(c.file), S.failed.has(c.file)].join("|"), () => askingCard(c));
+    }
+    askWords(c);
+    const drawn = S.drawn.get(c.file);
+    const words = drawn?.modified !== c.modified ? "-" : drawn.html === null ? "p" : "m";
+    return keep(`card:${c.file}`, [c.modified, Kit.lang, S.whole.has(c.file), S.busy.has(c.file), S.failed.has(c.file), words].join("|"), () => cardOf(c));
+  }
+  function cardOf(c) {
     const whole = S.whole.has(c.file), busy = S.busy.has(c.file), id = idOf(c.file);
     const failed = S.failed.has(c.file);
     const words = wordsOf(c, { class: `t-words entry-body${whole ? "" : " cut"}`, dir: "auto" });
@@ -497,6 +551,7 @@
    * The kit's questionnaire for a card; given what the seller sent and the board refused, it stands as they left it, each pick and their
    * own words put back through its own controls, on the last question, where they pressed.
    */
+  let askings = 0;
   function asking(c, sent) {
     const under = meta(c);
     const element = Kit.questions({ form: c.form, words: W.asked(), under, answer: (value) => {
@@ -511,7 +566,7 @@
       for (const name of one?.chosen ?? []) pick(`o${c.form.questions[at].options.findIndex((option) => option.name === name)}`);
       if (one?.own !== undefined) { pick("other"); const own = press("own"); if (own) { own.value = one.own; own.dispatchEvent(new Event("input")); } }
     });
-    return { form: JSON.stringify(c.form), lang: Kit.lang, modified: c.modified, under, element };
+    return { form: JSON.stringify(c.form), lang: Kit.lang, modified: c.modified, under, element, n: ++askings };
   }
   function askingCard(c) {
     const busy = S.busy.has(c.file), id = idOf(c.file), failed = S.failed.has(c.file);
@@ -527,7 +582,8 @@
   /** A card's field is one element for as long as the page lives, so the browser keeps its words, caret and selection across a draw. */
   const fieldOf = (file) => S.fields.get(file) ?? S.fields.set(file, h("input", { type: "text", class: "entry-field", dir: "auto", placeholder: W.reply(), autocomplete: "off", onkeydown: (event) => { if (event.key === "Enter" && !event.isComposing) sendFrom(file); } })).get(file);
   const sendFrom = (file) => { const c = S.cards.get(file), words = S.fields.get(file)?.value.trim(); if (c !== undefined && words) void answer(c, words); };
-  function goneLine(file) {
+  const goneLine = (file) => keep(`gone:${file}`, [S.gone.get(file).title, S.busy.has(file), Kit.lang].join("|"), () => goneOf(file));
+  function goneOf(file) {
     const { title } = S.gone.get(file);
     return h("li", { "data-for": file }, h("p", { class: "t-gone" }, h("span", { dir: "auto" }, W.gone(title)), h("button", { type: "button", class: "t-quiet", disabled: S.busy.has(file), onclick: () => void undo(file) }, h("span", {}, W.undo()))));
   }
@@ -566,6 +622,7 @@
     page.classList.toggle("t-wide", wide);
     page.classList.toggle("t-heads", n > 1);
   }
+  const headSaid = new WeakMap();
   function nowView() {
     const list = waiting();
     // The first card alone where it answers the seller's last message, then a column a key; a dismissed card's line stays in its column.
@@ -583,19 +640,28 @@
     const shown = KEYS[P.by].filter((key) => three || cols.get(key).length > 0);
     // The presses stand at the head of the page, drawn where two cards or more can change places.
     const pressed = rest.length > 1;
-    const out = [top(pressed ? controls() : h("span", {}),
-      quiet("past", W.history(), () => { S.view = "history"; S.gone.clear(); S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); }))];
+    const out = [keep("top", [pressed, S.menu, P.by, P.in, Kit.lang].join("|"), () => top(pressed ? controls() : h("span", {}),
+      quiet("past", W.history(), () => { S.view = "history"; wantDone(); S.gone.clear(); S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); })))];
     lay(pressed ? (three ? shown.length : both ? 2 : 1) : 1, pressed);
     const column = (key) => {
       const rows = cols.get(key), count = rows.filter((one) => one.counts).length;
-      return h("section", { class: `t-part${rows.length === 0 ? " t-none" : ""}` },
-        h("div", { class: "t-parthead" }, h("h2", { class: "bp-head" }, headOf(key, count, false))),
-        h("ul", { class: "t-list" }, rows.map((one) => one.row)));
+      const part = keep(`part:${P.by}:${key}`, "", () => h("section", { class: "t-part" }, h("div", { class: "t-parthead" }, h("h2", { class: "bp-head" })), h("ul", { class: "t-list" })));
+      part.classList.toggle("t-none", rows.length === 0);
+      const head = part.firstChild.firstChild, said = [P.by, key, count, Kit.lang].join("|");
+      if (headSaid.get(head) !== said) { headSaid.set(head, said); head.replaceChildren(...[headOf(key, count, false)].flat()); }
+      sync(part.lastChild, rows.map((one) => one.row));
+      return part;
     };
-    if (list.length === 0 && S.gone.size === 0) out.push(h("p", { class: "board-empty" }, S.cards.size > 0 ? W.none() : W.noneYet()));
-    else out.push(h("div", { class: "t-all" },
-      first && h("ul", { class: "t-list t-first" }, card(first)),
-      rest.length + S.gone.size > 0 && h("div", { class: "t-parts" }, shown.map(column))));
+    if (list.length === 0 && S.gone.size === 0) out.push(keep("empty", [S.cards.size > 0, Kit.lang].join("|"), () => h("p", { class: "board-empty" }, S.cards.size > 0 ? W.none() : W.noneYet())));
+    else {
+      const all = keep("all", "", () => h("div", { class: "t-all" }));
+      const head = first && keep("first", "", () => h("ul", { class: "t-list t-first" }));
+      if (head) sync(head, [card(first)]);
+      const parts = rest.length + S.gone.size > 0 && keep("parts", "", () => h("div", { class: "t-parts" }));
+      if (parts) sync(parts, shown.map(column));
+      sync(all, [head, parts]);
+      out.push(all);
+    }
     return out;
   }
   /** A card of 已处理: its title the press that opens it; a question said once, its answer under it; the day, what was done and the mark at its foot. */
@@ -631,7 +697,7 @@
     const today = midnight();
     const keys = KEYS[P.by];
     lay(pressed ? keys.length : 1, pressed);
-    if (found.length === 0) { out.push(h("p", { class: "board-empty" }, find ? W.notFound() : W.noneDone())); return out; }
+    if (found.length === 0) { if (unread.size === 0) out.push(h("p", { class: "board-empty" }, find ? W.notFound() : W.noneDone())); return out; }
     const column = (key) => {
       const mine = found.filter((c) => keyOf(P.by, c, c.doneAt) === key).sort((a, b) => FIRST[P.in](a, b) || b.doneAt - a.doneAt);
       const recent = find ? mine : mine.filter((c) => agoOf(c) <= 7), older = find ? [] : mine.filter((c) => agoOf(c) > 7);
@@ -651,13 +717,19 @@
   }
   // The count the board holds, set once it is answered; one refused is asked again at the next drawing.
   let counted, counting;
+  /** The width each card's fold was measured at: measured again only for a card built anew or a page of another width. */
+  const folded = new WeakMap();
   function draw() {
     if (!S.ready) { page.replaceChildren(status); return; }
     const typing = document.activeElement?.matches?.(".t-card input") ? document.activeElement : undefined;
     const held = typing === undefined && document.activeElement?.matches?.(".t-card, .t-open") ? document.activeElement.closest("[id]")?.id : undefined;
-    page.replaceChildren(...(S.view === "history" ? historyView() : nowView()), status);
-    if (held !== undefined) { const back = document.getElementById(held); (back?.matches("li") ? back.querySelector("button") : back)?.focus({ preventScroll: true }); }
+    keeping = new Set();
+    sync(page, [S.view === "history" ? historyView() : nowView(), status]);
+    for (const name of [...kept.keys()]) if (!keeping.has(name)) kept.delete(name);
+    if (held !== undefined && document.activeElement?.closest?.("[id]")?.id !== held) { const back = document.getElementById(held); (back?.matches("li") ? back.querySelector("button") : back)?.focus({ preventScroll: true }); }
     for (const box of page.querySelectorAll(".t-card:not(.t-form)")) {
+      if (folded.get(box) === innerWidth) continue;
+      folded.set(box, innerWidth);
       const words = box.querySelector(".t-words"), more = box.querySelector(".t-more"), name = box.querySelector(".entry-title");
       if (words.classList.contains("cut") && (words.scrollHeight > words.clientHeight + 1 || name.scrollHeight > name.clientHeight + 1)) more.hidden = false;
     }
@@ -685,7 +757,7 @@
   board.on("focus", (file) => { wanted = file; bring(); });
   function bring() {
     const file = wanted, c = S.cards.get(file);
-    if (c === undefined) return;
+    if (c === undefined) { if (unread.has(file)) wantDone(); return; }
     wanted = undefined;
     if (c.done !== undefined) { S.view = "history"; S.find = ""; S.shown.add(file); if (agoOf(c) > 7) S.weeks.add(`${keyOf(P.by, c, c.doneAt)}:${weekOf(c)}`); } else S.view = "now";
     draw();

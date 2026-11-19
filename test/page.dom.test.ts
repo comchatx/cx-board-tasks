@@ -401,7 +401,7 @@ it("reads every card it does not hold at once, not one after another", async () 
   document.body.innerHTML = BODY;
   const board = stand({ "a.md": TELL, "b.md": ASK, "c.md": "---\ntitle: Third\n---\nx\n" });
   const read = board.board.read.getMockImplementation()!;
-  board.board.read.mockImplementation(async (file) => { await g.promise; return await read(file); });
+  board.board.read.mockImplementation(async (file) => { if (file !== "inbox.json") await g.promise; return await read(file); });
   Object.defineProperty(window, "cxBoard", { configurable: true, value: board.board });
   new Function(KIT)();
   new Function(SCRIPT)();
@@ -764,4 +764,61 @@ it("draws the skill's own card that asks with options as the questionnaire it de
   open({ "kettle.md": example });
   await settle();
   expect([...cardOf("kettle.md").querySelectorAll(".kit-option-words")].map((one) => one.textContent)).toEqual(["Yiwu A$3.10 a unit, 12 days", "Ningbo B$3.40 a unit, 6 days", "Another answer"]);
+});
+
+/** Counts the reads of a card's words' and title's heights, by which the page measures 「展开」. */
+function foldReads(): { count: () => number; done: () => void } {
+  const spies = [vi.spyOn(Element.prototype, "scrollHeight", "get"), vi.spyOn(HTMLElement.prototype, "clientHeight", "get")];
+  return { count: () => spies.reduce((sum, spy) => sum + spy.mock.calls.length, 0), done: () => { for (const spy of spies) spy.mockRestore(); } };
+}
+
+it("takes out at a press that card's element alone: every other card stays the element it was, and no card's fold is measured again", async () => {
+  open({ "a.md": TELL, "b.md": "---\ntitle: Second\n---\ny\n", "c.md": "---\ntitle: Third\n---\nz\n", "d.md": ASK });
+  await settle();
+  const stay = ["b.md", "c.md", "d.md"];
+  const before = stay.map(cardOf);
+  const reads = foldReads();
+  try {
+    cardOf("a.md").querySelector<HTMLButtonElement>(".t-mark")!.click();
+    expect(cardOf("a.md")).toBeNull();
+    await settle();
+    document.querySelector<HTMLButtonElement>(`.t-card[data-file="d.md"] .t-mark`)!.click();
+    await settle();
+    expect([cardOf("a.md"), cardOf("d.md"), ...stay.slice(0, 2).map((file, at) => cardOf(file) === before[at])]).toEqual([null, null, true, true]);
+    expect(reads.count()).toBe(0);
+  } finally { reads.done(); }
+});
+
+it("measures a card's fold when its words or the page's width change, not at a draw for anything else", async () => {
+  const made = open({ "a.md": TELL, "b.md": "---\ntitle: Second\n---\ny\n" });
+  await settle();
+  const reads = foldReads();
+  const width = window.innerWidth;
+  try {
+    made.tell("context");
+    expect(reads.count()).toBe(0);
+    made.add("a.md", "---\ntitle: Storage fees rose\n---\nUp $41.20 on September.\n");
+    made.tell("files");
+    await settle();
+    const one = reads.count();
+    expect(one).toBeGreaterThan(0);
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width + 100 });
+    window.dispatchEvent(new Event("resize"));
+    expect(reads.count()).toBeGreaterThan(one);
+  } finally { reads.done(); Object.defineProperty(window, "innerWidth", { configurable: true, value: width }); }
+});
+
+it("keeps the done cards it read in inbox.json, and a later page reads a done card the board still gives at that time only once 已处理 is opened", async () => {
+  const DONE = "---\ntitle: Old\ndone: read\ndoneAt: 2026-10-20T08:00:00.000Z\n---\nGone.";
+  const first = open({ "a.md": TELL, "d.md": DONE });
+  await settle();
+  const picks = first.held.get("inbox.json")!.text;
+  expect(JSON.parse(picks)).toEqual({ by: "kind", in: "level", done: { "d.md": first.held.get("d.md")!.modified } });
+  const made = open({ "a.md": TELL, "d.md": DONE, "inbox.json": picks });
+  await settle();
+  expect(made.board.read.mock.calls.map(([file]) => file).sort()).toEqual(["a.md", "inbox.json"]);
+  document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!.click();
+  await settle();
+  expect([made.board.read.mock.calls.map(([file]) => file).filter((file) => file === "d.md"), document.querySelector(".t-done .entry-title")?.textContent]).toEqual([["d.md"], "Old"]);
+  expect(made.board.write).not.toHaveBeenCalled();
 });
