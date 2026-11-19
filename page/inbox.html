@@ -739,7 +739,7 @@
   }
   // The count the board holds, set once it is answered; one refused is asked again at the next drawing.
   let counted, counting;
-  /** The width each card's fold was measured at: measured again only for a card built anew or a page of another width. */
+  /** The width and the columns each card's fold was measured at: measured again only for a card built anew, or when the page's width or its columns change, a pick of grouping too. */
   const folded = new WeakMap();
   function draw() {
     if (!S.ready) { page.replaceChildren(status); return; }
@@ -749,9 +749,10 @@
     sync(page, [S.view === "history" ? historyView() : nowView(), status]);
     for (const name of [...kept.keys()]) if (!keeping.has(name)) kept.delete(name);
     if (held !== undefined && document.activeElement?.closest?.("[id]")?.id !== held) { const back = document.getElementById(held); (back?.matches("li") ? back.querySelector("button") : back)?.focus({ preventScroll: true }); }
+    const laid = `${innerWidth} ${page.className}`;
     for (const box of page.querySelectorAll(".t-card:not(.t-form)")) {
-      if (folded.get(box) === innerWidth) continue;
-      folded.set(box, innerWidth);
+      if (folded.get(box) === laid) continue;
+      folded.set(box, laid);
       const words = box.querySelector(".t-words"), more = box.querySelector(".t-more"), name = box.querySelector(".entry-title");
       if (words.classList.contains("cut")) more.hidden = !(words.scrollHeight > words.clientHeight + 1 || name.scrollHeight > name.clientHeight + 1);
     }

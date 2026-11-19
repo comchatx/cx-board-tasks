@@ -47,6 +47,8 @@ function open(files: Record<string, string>, locale = "en", asks: Record<string,
 }
 afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); });
 
+/** A time `hours` before the run, so a done card stays in its week's recent rows whatever the day the tests run. */
+const ago = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString();
 const settle = async (): Promise<void> => { for (let n = 0; n < 20; n += 1) await new Promise((done) => setTimeout(done, 0)); };
 const cards = (): string[] => [...document.querySelectorAll<HTMLElement>(".t-card")].map((one) => `${one.querySelector(".entry-title")!.textContent} ${one.querySelector("input") === null ? "tells" : "asks"}`);
 const cardOf = (file: string): HTMLElement => document.querySelector<HTMLElement>(`.t-card[data-file="${file}"]`)!;
@@ -565,7 +567,7 @@ it("draws the two presses and the columns in both views with no card, one card o
   await settle();
   expect(presses()).toEqual(["Grouping: Type", "Ordering: Urgency"]);
   expect(none.board.write).not.toHaveBeenCalled();
-  const one = open({ "a.md": TELL, "d.md": "---\ntitle: Old\ndone: read\ndoneAt: 2026-11-18T08:00:00.000Z\n---\nGone." });
+  const one = open({ "a.md": TELL, "d.md": `---\ntitle: Old\ndone: read\ndoneAt: ${ago(24)}\n---\nGone.` });
   await settle();
   expect([presses(), document.querySelector(".t-heads"), cards()]).toEqual([["Grouping: Type", "Ordering: Urgency"], null, ["Storage fees rose tells"]]);
   document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!.click();
@@ -866,7 +868,7 @@ it("lands a press held across a files notice between its down and its up: the bu
 });
 
 it("draws 已处理's rows as their files come, newest first, with no line saying nothing is done while they are read", async () => {
-  const files = Object.fromEntries(Array.from({ length: 20 }, (_, n) => [`d${String(n).padStart(2, "0")}.md`, `---\ntitle: Done ${n}\ndone: read\ndoneAt: 2026-11-18T08:00:00.000Z\n---\nx\n`]));
+  const files = Object.fromEntries(Array.from({ length: 20 }, (_, n) => [`d${String(n).padStart(2, "0")}.md`, `---\ntitle: Done ${n}\ndone: read\ndoneAt: ${ago(24)}\n---\nx\n`]));
   const first = open({ "a.md": TELL, ...files });
   await settle();
   const made = open({ "a.md": TELL, ...files, "inbox-done.json": first.held.get("inbox-done.json")!.text });
@@ -890,7 +892,7 @@ it("never writes inbox.json for a done card: the grouping another page chose on 
   const made = open({ "a.md": TELL, "b.md": "---\ntitle: Second\n---\ny\n" });
   await settle();
   made.add("inbox.json", `${JSON.stringify({ by: "date", in: "level" })}\n`);
-  made.add("a.md", `${TELL.replace("---\nUp", "done: read\ndoneAt: 2026-11-19T08:00:00.000Z\n---\nUp")}`);
+  made.add("a.md", `${TELL.replace("---\nUp", `done: read\ndoneAt: ${ago(1)}\n---\nUp`)}`);
   made.tell("files");
   await settle();
   expect([JSON.parse(made.held.get("inbox.json")!.text), made.held.has("inbox-done.json")]).toEqual([{ by: "date", in: "level" }, true]);
@@ -919,7 +921,7 @@ it("keeps the stored grouping when its first read of inbox.json is refused, and 
 });
 
 it("keeps the page's width and the top bar as they were when a second card or a second done row arrives, so a press held on 已处理 or 返回 lands", async () => {
-  const made = open({ "a.md": TELL, "d.md": "---\ntitle: Old\ndone: read\ndoneAt: 2026-11-18T08:00:00.000Z\n---\nGone." });
+  const made = open({ "a.md": TELL, "d.md": `---\ntitle: Old\ndone: read\ndoneAt: ${ago(24)}\n---\nGone.` });
   await settle();
   const page = document.getElementById("page")!;
   // The page's width is its stylesheet's one rule for #page: no class it takes sizes it.
@@ -938,7 +940,7 @@ it("keeps the page's width and the top bar as they were when a second card or a 
   };
   await across("b.md", "---\ntitle: Second\n---\ny\n");
   expect(document.querySelector(".t-done .entry-title")?.textContent).toBe("Old");
-  await across("e.md", "---\ntitle: Older\ndone: read\ndoneAt: 2026-11-17T08:00:00.000Z\n---\nGone.");
+  await across("e.md", `---\ntitle: Older\ndone: read\ndoneAt: ${ago(48)}\n---\nGone.`);
   expect([document.querySelector(".t-done"), cards().sort()]).toEqual([null, ["Second tells", "Storage fees rose tells"]]);
 });
 
@@ -964,8 +966,8 @@ it("hides 「展开」 again when a wider page shows a card's words whole", asyn
 });
 
 it("reads the done files newest first across every folder, so the newest done row is in the first wave", async () => {
-  const flat = Object.fromEntries(Array.from({ length: 16 }, (_, n) => [`d${String(n).padStart(2, "0")}.md`, `---\ntitle: Done ${n}\ndone: read\ndoneAt: 2026-11-10T08:00:00.000Z\n---\nx\n`]));
-  const files = { "a.md": TELL, ...flat, "done/new.md": "---\ntitle: Newest\ndone: read\ndoneAt: 2026-11-19T08:00:00.000Z\n---\nx\n" };
+  const flat = Object.fromEntries(Array.from({ length: 16 }, (_, n) => [`d${String(n).padStart(2, "0")}.md`, `---\ntitle: Done ${n}\ndone: read\ndoneAt: ${ago(72)}\n---\nx\n`]));
+  const files = { "a.md": TELL, ...flat, "done/new.md": `---\ntitle: Newest\ndone: read\ndoneAt: ${ago(1)}\n---\nx\n` };
   const first = open(files);
   await settle();
   const made = open({ ...files, "inbox-done.json": first.held.get("inbox-done.json")!.text });
@@ -976,4 +978,33 @@ it("reads the done files newest first across every folder, so the newest done ro
   document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!.click();
   await settle();
   expect([...document.querySelectorAll(".t-done .entry-title")].map((one) => one.textContent)).toContain("Newest");
+});
+
+const regroup = async (by: string, steps: readonly [number, boolean, boolean][]): Promise<void> => {
+  // One column of three is wide and holds the words whole; the one column by type is narrower and cuts them.
+  const wide = (): boolean => document.getElementById("page")?.classList.contains("t-c3") === true;
+  const spies = [vi.spyOn(Element.prototype, "scrollHeight", "get").mockImplementation(function (this: Element) { return this.classList.contains("t-words") ? (wide() ? 57 : 189) : 0; }),
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("t-words") ? 57 : 0; })];
+  try {
+    const made = open({ "a.md": TELL, "inbox.json": `${JSON.stringify({ by, in: "level" })}\n` });
+    await settle();
+    const box = cardOf("a.md"), more = box.querySelector<HTMLButtonElement>(".t-more")!;
+    for (const [n, isWide, hidden] of steps) {
+      if (n >= 0) {
+        document.querySelector<HTMLButtonElement>("#sort-by")!.click();
+        document.querySelectorAll<HTMLButtonElement>("#sort-by-menu [role=menuitemradio]")[n]!.click();
+        await settle();
+      }
+      expect([wide(), cardOf("a.md"), more.hidden]).toEqual([isWide, box, hidden]);
+    }
+    expect(made.board.write).toHaveBeenCalled();
+  } finally { for (const spy of spies) spy.mockRestore(); }
+};
+
+it("shows 「展开」 when a pick of grouping narrows a kept card's column and its words no longer fit", async () => {
+  await regroup("time", [[-1, true, true], [0, false, false]]);
+});
+
+it("hides 「展开」 when a pick of grouping widens a kept card's column and its words fit whole", async () => {
+  await regroup("kind", [[-1, false, false], [2, true, true]]);
 });
