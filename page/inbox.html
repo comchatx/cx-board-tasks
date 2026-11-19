@@ -242,23 +242,36 @@
   const KEYS = { kind: ["asks", "tells"], level: ["3", "2", "1"], time: ["today", "three", "older"] };
   const PICKS = "inbox.json";
   const P = { by: "kind", in: "level" };
-  /** The done cards the page has read, by file and the time the board gives it: a later page reads them only once 已处理 needs them. */
-  const known = new Map();
-  let knownSaid = "{}";
   function readPicks(text) {
     const kept = json(text);
-    if (kept?.done !== null && typeof kept?.done === "object") for (const [file, at] of Object.entries(kept.done)) if (typeof at === "number") known.set(file, at);
-    knownSaid = JSON.stringify(kept?.done ?? {});
     if (!WAYS.includes(kept?.by)) return;
     P.by = kept.by;
     P.in = WAYS.includes(kept.in) && kept.in !== kept.by ? kept.in : IN_FOR[kept.by];
   }
   // Read beside the tab's first read, never before it; a tab without the file, or one it cannot read, has the default pairing.
   const picked = board.read(PICKS).then(readPicks, () => {});
-  const writePicks = () => { knownSaid = JSON.stringify(Object.fromEntries(known)); void board.write(PICKS, `${JSON.stringify({ by: P.by, in: P.in, ...(known.size > 0 ? { done: Object.fromEntries(known) } : {}) })}\n`).catch(() => {}); };
   function choose(pick, to) {
     if (pick === "by") { P.by = to; if (P.in === to) P.in = IN_FOR[to]; } else P.in = to;
-    writePicks();
+    void board.write(PICKS, `${JSON.stringify({ by: P.by, in: P.in })}\n`).catch(() => {});
+  }
+
+  // ---- The done cards the page has read, kept in a file of the tab of their own, apart from the seller's picks ----
+  /** File → the time the board gave it when the page read it done: a later page reads such a file only once 已处理 needs it. */
+  const DONE_LIST = "inbox-done.json";
+  const known = new Map();
+  let knownSaid = "{}";
+  // A list the board refuses or that does not read is none: the page reads every file, as a page without it does.
+  const doneRead = board.read(DONE_LIST).then((text) => {
+    const kept = json(text);
+    if (kept === null || typeof kept !== "object" || Array.isArray(kept)) return;
+    for (const [file, at] of Object.entries(kept)) if (typeof at === "number") known.set(file, at);
+    knownSaid = JSON.stringify(Object.fromEntries(known));
+  }, () => {});
+  function keepDone() {
+    const said = JSON.stringify(Object.fromEntries(known));
+    if (said === knownSaid) return;
+    knownSaid = said;
+    void board.write(DONE_LIST, `${said}\n`).catch(() => {});
   }
 
   // ---- What the tab holds ----
@@ -285,15 +298,17 @@
     let listed;
     try {
       listed = (await board.list()).filter((one) => /\.md$/i.test(one.file));
-      await picked;
+      await doneRead;
       const now = new Set(listed.map((one) => one.file));
       for (const file of [...read.keys()]) if (!now.has(file)) read.delete(file);
       for (const file of [...unread.keys()]) if (!now.has(file)) unread.delete(file);
       // A file the picks file holds as done at the time the board gives it is done still: read when 已处理 needs it.
       const skipped = (one) => !doneWanted && !read.has(one.file) && known.get(one.file) === one.modified;
       for (const one of listed) if (skipped(one)) unread.set(one.file, one.modified);
+      // What may wait is read first; a file known done, in any folder, after it; each newest first.
+      const late = (one) => Number(/^done\//.test(one.file) || known.get(one.file) === one.modified);
       const stale = listed.filter((one) => !skipped(one) && read.get(one.file)?.modified !== one.modified)
-        .sort((a, b) => Number(/^done\//.test(a.file)) - Number(/^done\//.test(b.file)) || b.modified - a.modified);
+        .sort((a, b) => late(a) - late(b) || b.modified - a.modified);
       for (let left = stale; left.length > 0;) {
         const wave = left.slice(0, WAVE);
         const said = await Promise.allSettled(wave.map((one) => board.read(one.file)));
@@ -317,7 +332,7 @@
       known.clear();
       for (const c of read.values()) if (c.done !== undefined) known.set(c.file, c.modified);
       for (const [file, at] of unread) known.set(file, at);
-      if (JSON.stringify(Object.fromEntries(known)) !== knownSaid) writePicks();
+      keepDone();
     }
     // A card this read brought that the page did not hold asks for the board, by the card's own name; the first read asks for none.
     const fresh = first ? [] : [...S.cards.values()].filter((c) => c.done === undefined && !held.has(c.file)).sort((a, b) => b.modified - a.modified);
@@ -588,7 +603,12 @@
     const { title } = S.gone.get(file);
     return h("li", { "data-for": file }, h("p", { class: "t-gone" }, h("span", { dir: "auto" }, W.gone(title)), h("button", { type: "button", class: "t-quiet", disabled: S.busy.has(file), onclick: () => void undo(file) }, h("span", {}, W.undo()))));
   }
-  const top = (...inside) => h("div", { class: "t-top" }, ...inside);
+  /** A view's top bar: its presses and its one button are each kept on their own, so a press on one lands while the other comes or goes. */
+  function top(view, pressed, button) {
+    const bar = keep(`top:${view}`, "", () => h("div", { class: "t-top" }));
+    sync(bar, [keep(`top-picks:${view}`, [pressed, S.menu, P.by, P.in, Kit.lang].join("|"), () => pressed ? controls() : h("span", {})), keep(`top-button:${view}`, Kit.lang, button)]);
+    return bar;
+  }
   /** One of the two presses: it prints the way in force after its mark; its menu ticks the one in force. */
   function control(pick) {
     const open = S.menu === pick, id = `sort-${pick}`, name = pick === "by" ? W.split() : W.inside();
@@ -641,8 +661,7 @@
     const shown = KEYS[P.by].filter((key) => three || cols.get(key).length > 0);
     // The presses stand at the head of the page, drawn where two cards or more can change places.
     const pressed = rest.length > 1;
-    const out = [keep("top", [pressed, S.menu, P.by, P.in, Kit.lang].join("|"), () => top(pressed ? controls() : h("span", {}),
-      quiet("past", W.history(), () => { S.view = "history"; wantDone(); S.gone.clear(); S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); })))];
+    const out = [top("now", pressed, () => quiet("past", W.history(), () => { S.view = "history"; wantDone(); S.gone.clear(); S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); }))];
     lay(pressed ? (three ? shown.length : both ? 2 : 1) : 1, pressed);
     const column = (key) => {
       const rows = cols.get(key), count = rows.filter((one) => one.counts).length;
@@ -694,8 +713,7 @@
     const find = S.find.trim().toLowerCase();
     const all = done();
     const pressed = all.length > 1;
-    const out = [keep("top:past", [pressed, S.menu, P.by, P.in, Kit.lang].join("|"), () => top(pressed ? controls() : h("span", {}),
-      quiet("back", W.back(), () => { S.view = "now"; S.find = ""; S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); }))),
+    const out = [top("past", pressed, () => quiet("back", W.back(), () => { S.view = "now"; S.find = ""; S.menu = undefined; draw(); document.querySelector(".t-top > .t-quiet")?.focus(); })),
       // The field is one element while 已处理 stands, so the browser keeps its words, caret and selection across a draw.
       keep("find", Kit.lang, () => { const field = h("input", { type: "search", class: "entry-field", "aria-label": W.search(), placeholder: W.search(), autocomplete: "off", value: S.find, oninput: () => { S.find = field.value; draw(); } }); return h("div", { class: "t-find" }, field); })];
     const found = find ? all.filter((c) => c.title.toLowerCase().includes(find)) : all;
@@ -745,7 +763,7 @@
       if (folded.get(box) === innerWidth) continue;
       folded.set(box, innerWidth);
       const words = box.querySelector(".t-words"), more = box.querySelector(".t-more"), name = box.querySelector(".entry-title");
-      if (words.classList.contains("cut") && (words.scrollHeight > words.clientHeight + 1 || name.scrollHeight > name.clientHeight + 1)) more.hidden = false;
+      if (words.classList.contains("cut")) more.hidden = !(words.scrollHeight > words.clientHeight + 1 || name.scrollHeight > name.clientHeight + 1);
     }
     if (typing?.isConnected) typing.focus({ preventScroll: true });
     // A draw while a mark's small card is open (a card landing, the board pulled wider) leaves it open.

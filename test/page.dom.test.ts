@@ -276,7 +276,7 @@ it("draws every card of a tab longer than the frame's 32 asks out at once, and a
   new Function(KIT)();
   new Function(SCRIPT)();
   await vi.waitFor(() => expect(cards()).toHaveLength(45), { timeout: 4000 });
-  const cardReads = (): number => made.board.read.mock.calls.filter(([file]) => file !== "inbox.json").length;
+  const cardReads = (): number => made.board.read.mock.calls.filter(([file]) => !file.endsWith(".json")).length;
   const asked = cardReads();
   await new Promise((done) => setTimeout(done, 1200));
   expect([busy, most <= 32, cardReads(), asked]).toEqual([2, true, 47, 47]);
@@ -401,12 +401,12 @@ it("reads every card it does not hold at once, not one after another", async () 
   document.body.innerHTML = BODY;
   const board = stand({ "a.md": TELL, "b.md": ASK, "c.md": "---\ntitle: Third\n---\nx\n" });
   const read = board.board.read.getMockImplementation()!;
-  board.board.read.mockImplementation(async (file) => { if (file !== "inbox.json") await g.promise; return await read(file); });
+  board.board.read.mockImplementation(async (file) => { if (!file.endsWith(".json")) await g.promise; return await read(file); });
   Object.defineProperty(window, "cxBoard", { configurable: true, value: board.board });
   new Function(KIT)();
   new Function(SCRIPT)();
   await settle();
-  expect(board.board.read.mock.calls.map(([file]) => file).filter((file) => file !== "inbox.json")).toHaveLength(3);
+  expect(board.board.read.mock.calls.map(([file]) => file).filter((file) => !file.endsWith(".json"))).toHaveLength(3);
   g.release();
   await settle();
   expect(cards()).toHaveLength(3);
@@ -808,15 +808,15 @@ it("measures a card's fold when its words or the page's width change, not at a d
   } finally { reads.done(); Object.defineProperty(window, "innerWidth", { configurable: true, value: width }); }
 });
 
-it("keeps the done cards it read in inbox.json, and a later page reads a done card the board still gives at that time only once 已处理 is opened", async () => {
+it("keeps the done cards it read in a file of their own, never in inbox.json, and a later page reads a done card the board still gives at that time only once 已处理 is opened", async () => {
   const DONE = "---\ntitle: Old\ndone: read\ndoneAt: 2026-10-20T08:00:00.000Z\n---\nGone.";
   const first = open({ "a.md": TELL, "d.md": DONE });
   await settle();
-  const picks = first.held.get("inbox.json")!.text;
-  expect(JSON.parse(picks)).toEqual({ by: "kind", in: "level", done: { "d.md": first.held.get("d.md")!.modified } });
-  const made = open({ "a.md": TELL, "d.md": DONE, "inbox.json": picks });
+  const list = first.held.get("inbox-done.json")!.text;
+  expect([JSON.parse(list), first.held.has("inbox.json")]).toEqual([{ "d.md": first.held.get("d.md")!.modified }, false]);
+  const made = open({ "a.md": TELL, "d.md": DONE, "inbox-done.json": list });
   await settle();
-  expect(made.board.read.mock.calls.map(([file]) => file).sort()).toEqual(["a.md", "inbox.json"]);
+  expect(made.board.read.mock.calls.map(([file]) => file).sort()).toEqual(["a.md", "inbox-done.json", "inbox.json"]);
   document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!.click();
   await settle();
   expect([made.board.read.mock.calls.map(([file]) => file).filter((file) => file === "d.md"), document.querySelector(".t-done .entry-title")?.textContent]).toEqual([["d.md"], "Old"]);
@@ -851,7 +851,7 @@ it("draws 已处理's rows as their files come, newest first, with no line sayin
   const files = Object.fromEntries(Array.from({ length: 20 }, (_, n) => [`d${String(n).padStart(2, "0")}.md`, `---\ntitle: Done ${n}\ndone: read\ndoneAt: 2026-11-18T08:00:00.000Z\n---\nx\n`]));
   const first = open({ "a.md": TELL, ...files });
   await settle();
-  const made = open({ "a.md": TELL, ...files, "inbox.json": first.held.get("inbox.json")!.text });
+  const made = open({ "a.md": TELL, ...files, "inbox-done.json": first.held.get("inbox-done.json")!.text });
   await settle();
   const read = made.board.read.getMockImplementation()!;
   let release: () => void = () => {};
@@ -866,4 +866,93 @@ it("draws 已处理's rows as their files come, newest first, with no line sayin
   release();
   await settle();
   expect(titles()).toHaveLength(20);
+});
+
+it("never writes inbox.json for a done card: the grouping another page chose on the same board stands when this page reads a card done", async () => {
+  const made = open({ "a.md": TELL, "b.md": "---\ntitle: Second\n---\ny\n" });
+  await settle();
+  made.add("inbox.json", `${JSON.stringify({ by: "date", in: "level" })}\n`);
+  made.add("a.md", `${TELL.replace("---\nUp", "done: read\ndoneAt: 2026-11-19T08:00:00.000Z\n---\nUp")}`);
+  made.tell("files");
+  await settle();
+  expect([JSON.parse(made.held.get("inbox.json")!.text), made.held.has("inbox-done.json")]).toEqual([{ by: "date", in: "level" }, true]);
+  expect(made.board.write.mock.calls.map(([file]) => file)).toEqual(["inbox-done.json"]);
+});
+
+it("keeps the stored grouping when its first read of inbox.json is refused, and reads every file when the done list is refused", async () => {
+  const DONE = "---\ntitle: Old\ndone: read\ndoneAt: 2026-10-20T08:00:00.000Z\n---\nGone.";
+  const first = open({ "a.md": TELL, "d.md": DONE });
+  await settle();
+  const list = first.held.get("inbox-done.json")!.text;
+  document.body.replaceChildren();
+  const stored = `${JSON.stringify({ by: "date", in: "level" })}\n`;
+  document.documentElement.dataset["locale"] = "en";
+  document.body.className = "kit";
+  document.body.innerHTML = BODY;
+  const made = stand({ "a.md": TELL, "d.md": DONE, "inbox.json": stored, "inbox-done.json": list });
+  const read = made.board.read.getMockImplementation()!;
+  made.board.read.mockImplementation(async (file) => { if (file.endsWith(".json")) throw new Error("too_often"); return await read(file); });
+  Object.defineProperty(window, "cxBoard", { configurable: true, value: made.board });
+  new Function(KIT)();
+  new Function(SCRIPT)();
+  await settle();
+  expect(made.held.get("inbox.json")!.text).toBe(stored);
+  expect(made.board.read.mock.calls.map(([file]) => file).filter((file) => file.endsWith(".md")).sort()).toEqual(["a.md", "d.md"]);
+});
+
+it("lands a press on the top bar's button while the presses beside it come: 已处理 when a second card arrives, 返回 when a second done row arrives", async () => {
+  const made = open({ "a.md": TELL, "d.md": "---\ntitle: Old\ndone: read\ndoneAt: 2026-11-18T08:00:00.000Z\n---\nGone." });
+  await settle();
+  const across = async (file: string, text: string): Promise<void> => {
+    const button = document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!;
+    button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    made.add(file, text);
+    made.tell("files");
+    await settle();
+    expect(button.isConnected).toBe(true);
+    button.click();
+    await settle();
+  };
+  expect(document.querySelector(".t-ctls")).toBeNull();
+  await across("b.md", "---\ntitle: Second\n---\ny\n");
+  expect(document.querySelector(".t-done .entry-title")?.textContent).toBe("Old");
+  expect(document.querySelector(".t-ctls")).toBeNull();
+  await across("e.md", "---\ntitle: Older\ndone: read\ndoneAt: 2026-11-17T08:00:00.000Z\n---\nGone.");
+  expect([document.querySelector(".t-done"), cards().sort()]).toEqual([null, ["Second tells", "Storage fees rose tells"]]);
+});
+
+it("hides 「展开」 again when a wider page shows a card's words whole", async () => {
+  open({ "a.md": TELL });
+  await settle();
+  const more = cardOf("a.md").querySelector<HTMLButtonElement>(".t-more")!;
+  const width = window.innerWidth;
+  let tall = 189;
+  const spies = [vi.spyOn(Element.prototype, "scrollHeight", "get").mockImplementation(function (this: Element) { return this.classList.contains("t-words") ? tall : 0; }),
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (this: HTMLElement) { return this.classList.contains("t-words") ? 57 : 0; })];
+  try {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 288 });
+    window.dispatchEvent(new Event("resize"));
+    await settle();
+    expect(more.hidden).toBe(false);
+    tall = 57;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 });
+    window.dispatchEvent(new Event("resize"));
+    await settle();
+    expect([cardOf("a.md").querySelector(".t-more"), more.hidden]).toEqual([more, true]);
+  } finally { for (const spy of spies) spy.mockRestore(); Object.defineProperty(window, "innerWidth", { configurable: true, value: width }); }
+});
+
+it("reads the done files newest first across every folder, so the newest done row is in the first wave", async () => {
+  const flat = Object.fromEntries(Array.from({ length: 16 }, (_, n) => [`d${String(n).padStart(2, "0")}.md`, `---\ntitle: Done ${n}\ndone: read\ndoneAt: 2026-11-10T08:00:00.000Z\n---\nx\n`]));
+  const files = { "a.md": TELL, ...flat, "done/new.md": "---\ntitle: Newest\ndone: read\ndoneAt: 2026-11-19T08:00:00.000Z\n---\nx\n" };
+  const first = open(files);
+  await settle();
+  const made = open({ ...files, "inbox-done.json": first.held.get("inbox-done.json")!.text });
+  await settle();
+  const read = made.board.read.getMockImplementation()!;
+  let reads = 0;
+  made.board.read.mockImplementation(async (file) => { if (file.endsWith(".md") && reads++ >= 16) await new Promise(() => {}); return await read(file); });
+  document.querySelector<HTMLButtonElement>(".t-top > .t-quiet")!.click();
+  await settle();
+  expect([...document.querySelectorAll(".t-done .entry-title")].map((one) => one.textContent)).toContain("Newest");
 });
