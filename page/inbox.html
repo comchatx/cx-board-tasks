@@ -169,8 +169,7 @@
     levelWords: [() => w("Routine", "常规"), () => w("Urgent", "加急"), () => w("Very urgent", "特急")],
     levelSaid: [() => w("Urgency: routine", "紧急程度：常规"), () => w("Urgency: urgent", "紧急程度：加急"), () => w("Urgency: very urgent", "紧急程度：特急")],
     groups: { today: () => w("Today", "今天"), three: () => w("Last 3 days", "最近 3 天"), older: () => w("Older", "更早") },
-    // The two heads of 已处理 grouped by kind wait for the copy seat's words; these stand in until they come.
-    kinds: { asks: () => w("Questions", "提问"), tells: () => w("Notices", "通知") },
+    kinds: { asks: () => w("Questions", "提问"), tells: () => w("Updates", "汇报") },
   };
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const two = (n) => String(n).padStart(2, "0");

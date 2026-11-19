@@ -14,7 +14,6 @@ What `page/inbox.html` does, for the one who builds it.
 - A second question card answered within five seconds of the first send is refused by the platform's guard on a page's sends, one send a press: the page says the answer was not sent and keeps the picks.
 - A send that went through and a mark that failed leave the card waiting, and a second answer is a second message. A read already under way when a card is marked can draw it as waiting until the next read.
 - The page draws a read once it is whole: until the first read is whole it draws nothing and sets no count, and while it reads again it keeps every card it holds and the count it set. A board's 重新加载 makes a new page, so its first read draws nothing until it is whole.
-- Two lines stand in for words the copy seat has not yet written: 已处理's column heads by type, 提问 / Questions and 通知 / Notices (`W.kinds`).
 - A tab of more than 32 cards is read in parts: when the board says the page asks too often, the page waits a second and reads on.
 - Marking a card reads its file and writes it back with the marks. Words written to it between that read and the write are lost.
 - The page changes only `done`, `doneAt`, `answer` and `answers` in a card's front matter, and writes `inbox.json`. It writes the file with LF line ends and plain `---` fences, without a BOM.

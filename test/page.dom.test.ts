@@ -596,7 +596,7 @@ it("lays out Done in columns by the same two presses, each card's mark, state an
   vi.setSystemTime(new Date(2026, 10, 12, 12));
   await settle();
   document.querySelector<HTMLButtonElement>(".t-top .t-quiet")!.click();
-  expect(heads()).toEqual(["Questions2", "Notices1"]);
+  expect(heads()).toEqual(["Questions2", "Updates1"]);
   const foot = (one: Element): string => `${one.lastElementChild!.querySelectorAll("rect.lit").length} ${one.lastElementChild!.textContent}`;
   expect([...document.querySelectorAll(".t-done")].map(foot)).toEqual(["3 Answered · Nov 10", "1 Dismissed · Nov 11", "1 Read · Nov 11"]);
   expect([...document.querySelectorAll(".t-sortbtn")]).toHaveLength(2);
