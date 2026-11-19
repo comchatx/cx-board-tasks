@@ -28,14 +28,29 @@ It sells **6 a day** and 40 are left:
 - `title` is the one line the seller reads first. Without it, the card's first heading is its title.
 - `asks: true` makes the card one that asks: the seller answers it in a field on the card, in their own words. A card without it tells, and the seller ticks it 已读 / Mark as read.
 - The seller may dismiss a card that asks, 忽略 / Dismiss.
+- `level` says how urgent the card is, as the `cx-board` skill says: the Inbox marks each card by it, and a card without it is 常规 / Routine.
+- `questions` makes the card one that asks with options, in place of a field: one line of JSON in the form the platform's option card takes, `comchatx.options/1`, one question or several, or `comchatx.confirm/1` for a yes or a no. Under 已处理 / Done an answered card shows its title, its questions and the seller's answers; its words stay in the file but are not shown there.
+
+```markdown
+---
+title: Which supplier for the blue kettle?
+asks: true
+questions: {"form":"comchatx.options/1","questions":[{"words":"Which supplier?","options":[{"name":"Yiwu A","line":"$3.10 a unit, 12 days"},{"name":"Ningbo B","line":"$3.40 a unit, 6 days"}]}]}
+---
+
+Both can ship 500 by the end of the month.
+```
+
+- Each question has `words` and `options`, each option a `name` and, where it helps, a `line` under it. An answer names the options by their names, so the names in one question differ. `"several": true` lets the seller pick more than one; `"own": false` takes away the last row, where the seller writes their own answer. With several questions the seller may skip one, 跳过 / Skip; a card with every question skipped is dismissed and nothing comes to you.
+- A `comchatx.confirm/1` card has a `title`, the thing proposed, and may have a `message`, what will happen; the seller answers 是 / Yes or 否 / No.
 - `reply: true` makes the card your answer to the seller's last message: the Inbox shows the newest such card first.
-- Then the cards that ask, then those that tell, each part newest first by the file's time. The seller reads each card on its own.
+- Then the cards, as the seller groups and orders them with 分组 / Grouping and 排序 / Ordering, by kind, by urgency or by time. Until the seller picks, the cards that ask stand before those that tell, the more urgent first in each and then the newest. The seller reads each card on its own.
 - A card does not hold your turn. You go on, and the seller answers when they come to it.
 - When a new card lands, the Inbox asks for the board to be shown: the column opens on the Inbox, waits while the seller is typing where it would cover the chat, and stays shut once the seller has closed what such an ask opened.
 
 ## The page's names
 
-Call the Inbox's parts by the names the seller sees, in the seller's language: 收件箱 / Inbox, 已处理 / Done, 已读 / Mark as read, 忽略 / Dismiss.
+Call the Inbox's parts by the names the seller sees, in the seller's language: 收件箱 / Inbox, 已处理 / Done, 已读 / Mark as read, 忽略 / Dismiss, 分组 / Grouping, 排序 / Ordering.
 
 ## Where a card stands
 
@@ -43,9 +58,12 @@ The Inbox writes into the card's own front matter where it stands, and moves not
 
 - `done: read`, `done: answered` or `done: dismissed`;
 - `doneAt`, when;
-- `answer`, the seller's words, on a card answered.
+- `answer`, the seller's words, on a card answered;
+- `answers`, on a card that asks with options, what the seller chose, in the platform's form: `{"form":"comchatx.options/1","answers":[...]}`, an answer a question in order, `{"chosen":[names],"own":"their words"}`, or `null` for one skipped; `{"form":"comchatx.confirm/1","confirmed":true}` for a yes or a no.
 
 A card with none of these waits for the seller. Nothing in the Inbox is deleted. A card read or dismissed is not told to you; it is in the file when you next read it.
+
+How the seller groups and orders the cards is kept in `待办/inbox.json`. It is not a card: leave it as it is.
 
 Files from before 0.3.0, under `待办/todo/` and `待办/done/`, are cards too. A `kind` of `proposal`, `choice` or `input` asks, and `finding` or `change` tells.
 
@@ -58,5 +76,7 @@ Twenty units.
 
 <board from="待办" card="restock-blue-kettle.md"></board>
 ```
+
+On a card with options, the words are each question over its answer, 未作答 / Not answered for one skipped; for a yes or a no, the card's question over 是 / Yes or 否 / No.
 
 Read the card's file for what you asked. A message sent while you are working waits until your turn ends.

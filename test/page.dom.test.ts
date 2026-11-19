@@ -124,13 +124,13 @@ it("lists what is done under Done, by how and when, with the seller's answer whe
   });
   await settle();
   document.querySelector<HTMLButtonElement>(".t-top .t-quiet")!.click();
-  const rows = (): string[] => [...document.querySelectorAll(".t-row")].map((one) => `${one.querySelector(".entry-title")!.textContent} | ${one.querySelector(".t-when")!.textContent}`);
+  const rows = (): string[] => [...document.querySelectorAll(".t-done")].map((one) => `${one.querySelector(".entry-title")!.textContent} | ${one.querySelector(".t-when")!.textContent}`);
   vi.setSystemTime(new Date(2026, 10, 12, 12));
   document.querySelector<HTMLButtonElement>(".t-top .t-quiet")!.click();
   document.querySelector<HTMLButtonElement>(".t-top .t-quiet")!.click();
-  expect(rows()).toEqual(["Fees rose | Read · Nov 11", "Raise the ad budget? | Answered · Nov 10"]);
-  document.querySelectorAll<HTMLButtonElement>(".t-row")[1]!.click();
-  expect([...document.querySelectorAll(".t-past p")].map((one) => one.textContent)).toEqual(["It runs out by 15:00.", "You: Yes."]);
+  expect(rows()).toEqual(["Raise the ad budget? | Answered · Nov 10", "Fees rose | Read · Nov 11"]);
+  document.querySelectorAll<HTMLButtonElement>(".t-open")[0]!.click();
+  expect([...document.querySelectorAll(".t-done p")].map((one) => one.textContent)).toEqual(["It runs out by 15:00.", "You: Yes."]);
   const search = document.querySelector<HTMLInputElement>("input[type=search]")!;
   search.value = "zzz";
   search.dispatchEvent(new Event("input"));
@@ -144,7 +144,7 @@ it("brings the card the board names into view once it is read, a waiting one in 
   expect(document.activeElement).toBe(cardOf("b.md"));
   made.tell("focus", "old.md");
   await settle();
-  expect(document.activeElement?.matches(".t-row[aria-expanded=true]")).toBe(true);
+  expect(document.activeElement?.matches(".t-open[aria-expanded=true]")).toBe(true);
 });
 
 it("reads again only what changed when the board's files change, and goes on reading after a refusal for asking too often", async () => {
@@ -276,9 +276,10 @@ it("draws every card of a tab longer than the frame's 32 asks out at once, and a
   new Function(KIT)();
   new Function(SCRIPT)();
   await vi.waitFor(() => expect(cards()).toHaveLength(45), { timeout: 4000 });
-  const asked = made.board.read.mock.calls.length;
+  const cardReads = (): number => made.board.read.mock.calls.filter(([file]) => file !== "inbox.json").length;
+  const asked = cardReads();
   await new Promise((done) => setTimeout(done, 1200));
-  expect([busy, most <= 32, made.board.read.mock.calls.length, asked]).toEqual([2, true, 47, 47]);
+  expect([busy, most <= 32, cardReads(), asked]).toEqual([2, true, 47, 47]);
 });
 
 it("asks for the board by a card's own name when a read brings a waiting card it did not hold, and never on its first read", async () => {
@@ -303,7 +304,7 @@ it("reaches a card's answer, then Send, then its dismiss by Tab", async () => {
   open({ "b.md": ASK });
   await settle();
   const order = [...cardOf("b.md").querySelectorAll<HTMLElement>("input, button:not([hidden])")].map((one) => one.getAttribute("aria-label") ?? one.textContent);
-  expect(order).toEqual(["Answer “Restock the blue kettle?”", "Send", "Dismiss “Restock the blue kettle?”"]);
+  expect(order).toEqual(["Urgency: routine", "Answer “Restock the blue kettle?”", "Send", "Dismiss “Restock the blue kettle?”"]);
 });
 
 it("puts cx's answer to the seller's last message first, the newest card that says it is one, over those that ask", async () => {
@@ -405,7 +406,7 @@ it("reads every card it does not hold at once, not one after another", async () 
   new Function(KIT)();
   new Function(SCRIPT)();
   await settle();
-  expect(board.board.read).toHaveBeenCalledTimes(3);
+  expect(board.board.read.mock.calls.map(([file]) => file).filter((file) => file !== "inbox.json")).toHaveLength(3);
   g.release();
   await settle();
   expect(cards()).toHaveLength(3);
@@ -459,7 +460,7 @@ it("draws a done card's words by the same drawing when its row is opened", async
   await settle();
   made.tell("focus", "a.md");
   await settle();
-  expect(document.querySelector(".t-past .t-past-words.markdown strong")?.textContent).toBe("$41.20");
+  expect(document.querySelector(".t-done .t-past-words.markdown strong")?.textContent).toBe("$41.20");
 });
 
 it("says the answer field's placeholder in the page's language as it is now, not as it was when the field was made", async () => {
@@ -530,4 +531,237 @@ it("keeps a card's words as text where the board's drawing answers anything but 
     const words = cardOf("b.md").querySelector(".t-words")!;
     expect([String(answer), words.classList.contains("markdown"), [...words.querySelectorAll("p")].map((one) => one.textContent), words.querySelector("img")]).toEqual([String(answer), false, ["It sells 6 a day.", "40 are left."], null]);
   }
+});
+
+const LEVELED = (title: string, level: number | undefined, asks = false): string => `---\ntitle: ${title}\n${asks ? "asks: true\n" : ""}${level === undefined ? "" : `level: ${level}\n`}---\nx\n`;
+const lit = (file: string): number => cardOf(file).querySelectorAll(".t-level .t-bars rect.lit").length;
+const heads = (): string[] => [...document.querySelectorAll(".t-part:not(.t-none) .t-parthead")].map((one) => one.textContent!.trim());
+
+it("marks a card's urgency by its level, a card with none as routine, and orders by kind, the more urgent first inside a kind", async () => {
+  open({ "a.md": LEVELED("Old and very urgent", 3, true), "b.md": LEVELED("New and routine", undefined, true), "c.md": LEVELED("Urgent notice", 2), "d.md": LEVELED("Plain notice", 1) });
+  await settle();
+  expect(cards()).toEqual(["Old and very urgent asks", "New and routine asks", "Urgent notice tells", "Plain notice tells"]);
+  expect([lit("a.md"), lit("b.md"), lit("c.md"), lit("d.md")]).toEqual([3, 1, 2, 1]);
+  expect(cardOf("a.md").querySelector(".t-level")!.getAttribute("aria-label")).toBe("Urgency: very urgent");
+  expect(heads()).toEqual(["2 to answer", "2 to read"]);
+});
+
+it("shows a mark's level in a small card under the pointer, and Escape takes it away", async () => {
+  open({ "a.md": LEVELED("Hot", 2, true), "b.md": TELL });
+  await settle();
+  const mark = cardOf("a.md").querySelector<HTMLButtonElement>(".t-level")!;
+  mark.dispatchEvent(new Event("mouseenter"));
+  expect(cardOf("a.md").querySelector(".t-tip")?.textContent).toBe("Urgent");
+  mark.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  expect(document.querySelector(".t-tip")).toBeNull();
+});
+
+it("draws the two presses where two cards can change places, none for one card or none, and keeps the pairing picked in inbox.json", async () => {
+  const one = open({ "a.md": TELL });
+  await settle();
+  expect(document.querySelector(".t-sortbtn")).toBeNull();
+  expect(document.querySelector(".t-heads")).toBeNull();
+  const made = open({ "a.md": LEVELED("Hot", 3), "b.md": LEVELED("Cold", 1, true), "c.md": LEVELED("Warm", 2) });
+  await settle();
+  expect(one.board.write).not.toHaveBeenCalled();
+  expect([...document.querySelectorAll(".t-sortbtn")].map((press) => press.getAttribute("aria-label"))).toEqual(["Grouping: Type", "Ordering: Urgency"]);
+  document.querySelector<HTMLButtonElement>("#sort-by")!.click();
+  expect([...document.querySelectorAll("#sort-by-menu [role=menuitemradio]")].map((item) => `${item.textContent}${item.getAttribute("aria-checked") === "true" ? " ✓" : ""}`)).toEqual(["Type ✓", "Urgency", "Date"]);
+  document.querySelectorAll<HTMLButtonElement>("#sort-by-menu [role=menuitemradio]")[1]!.click();
+  await settle();
+  expect(heads()).toEqual(["Very urgent1", "Urgent1", "Routine1"]);
+  expect([...document.querySelectorAll(".t-sortbtn")].map((press) => press.getAttribute("aria-label"))).toEqual(["Grouping: Urgency", "Ordering: Newest"]);
+  expect(made.held.get("inbox.json")?.text).toBe('{"by":"level","in":"time"}\n');
+  expect(cards()).toEqual(["Hot tells", "Warm tells", "Cold asks"]);
+  const again = open({ "a.md": LEVELED("Hot", 3), "b.md": LEVELED("Cold", 1, true), "inbox.json": '{"by":"time","in":"kind"}\n' });
+  await settle();
+  expect([...document.querySelectorAll(".t-sortbtn")].map((press) => press.getAttribute("aria-label"))).toEqual(["Grouping: Date", "Ordering: Type"]);
+  expect(cards()).toEqual(["Cold asks", "Hot tells"]);
+  expect(again.board.read.mock.calls.map(([file]) => file)).not.toContain("inbox.md");
+});
+
+it("names the two presses and the ways in the signed Chinese", async () => {
+  open({ "a.md": TELL, "b.md": ASK }, "zh");
+  await settle();
+  expect([...document.querySelectorAll(".t-sortbtn")].map((press) => press.getAttribute("aria-label"))).toEqual(["分组：类型", "排序：紧急程度"]);
+  expect(cardOf("b.md").querySelector(".t-level")!.getAttribute("aria-label")).toBe("紧急程度：常规");
+});
+
+it("lays out Done in columns by the same two presses, each card's mark, state and day at its foot", async () => {
+  open({
+    "a.md": "---\ntitle: Raise the ad budget?\nasks: true\nlevel: 3\ndone: answered\ndoneAt: 2026-11-10T09:00:00.000Z\n---\nx",
+    "b.md": "---\ntitle: Fees rose\ndone: read\ndoneAt: 2026-11-11T09:00:00.000Z\n---\nUp.",
+    "c.md": "---\ntitle: Dropped\nasks: true\ndone: dismissed\ndoneAt: 2026-11-11T10:00:00.000Z\n---\nx",
+  });
+  vi.setSystemTime(new Date(2026, 10, 12, 12));
+  await settle();
+  document.querySelector<HTMLButtonElement>(".t-top .t-quiet")!.click();
+  expect(heads()).toEqual(["Questions2", "Updates1"]);
+  const foot = (one: Element): string => `${one.lastElementChild!.querySelectorAll("rect.lit").length} ${one.lastElementChild!.textContent}`;
+  expect([...document.querySelectorAll(".t-done")].map(foot)).toEqual(["3 Answered · Nov 10", "1 Dismissed · Nov 11", "1 Read · Nov 11"]);
+  expect([...document.querySelectorAll(".t-sortbtn")]).toHaveLength(2);
+  expect(document.querySelector("input[type=search]")).not.toBeNull();
+});
+
+const FORM = (questions: unknown[]): string => `---\ntitle: Pick a supplier\nlevel: 2\nquestions: ${JSON.stringify(JSON.stringify({ form: "comchatx.options/1", questions }))}\n---\nWho ships it?\n`;
+const ONE = [{ words: "Which supplier?", options: [{ name: "Yiwu A" }, { name: "Ningbo B" }] }];
+const TWO = [...ONE, { words: "How many?", options: [{ name: "200" }, { name: "500" }] }];
+
+it("draws a card that asks with options by the kit's questionnaire, sends the answer naming its card, and keeps it as answer and answers", async () => {
+  const made = open({ "q.md": FORM(ONE), "a.md": TELL });
+  await settle();
+  const card = cardOf("q.md");
+  expect(card.querySelector(".kit-asked .entry-title")!.textContent).toBe("Which supplier?");
+  expect(card.querySelectorAll(".t-level rect.lit")).toHaveLength(2);
+  expect([...card.querySelectorAll("button")].map((one) => one.textContent || one.getAttribute("aria-label"))).not.toContain("Skip");
+  card.querySelectorAll<HTMLInputElement>(".kit-option input")[1]!.click();
+  cardOf("q.md").querySelector<HTMLButtonElement>(".kit-asked-foot .primary")!.click();
+  await settle();
+  expect(made.board.send).toHaveBeenCalledWith("Which supplier?\nNingbo B", { card: "q.md" });
+  const text = made.held.get("q.md")!.text;
+  expect(text).toContain("done: answered\n");
+  expect(text).toContain('answer: "Which supplier?\\nNingbo B"\n');
+  const answers = /^answers: (.*)$/m.exec(text)![1]!;
+  expect(JSON.parse(JSON.parse(answers))).toEqual({ form: "comchatx.options/1", answers: [{ chosen: ["Ningbo B"] }] });
+  expect(cards()).toEqual(["Storage fees rose tells"]);
+});
+
+it("reads a question holding a line or paragraph separator whole, as the form was written", async () => {
+  const words = ["Ship by sea\u2028or by air?", "Which\u2029warehouse?"];
+  open({ "q.md": FORM(words.map((one) => ({ words: one, options: [{ name: "Yes" }, { name: "No" }] }))) });
+  await settle();
+  expect(cardOf("q.md").querySelector(".kit-asked .entry-title")?.textContent ?? "").toContain(words[0]);
+});
+
+it("offers Skip where a card asks several questions, keeps the picks across a draw, sends each question over its answer, and dismisses a card with every question skipped", async () => {
+  const made = open({ "q.md": FORM(TWO), "s.md": FORM(TWO).replace("Pick a supplier", "Skip me"), "a.md": TELL });
+  await settle();
+  const press = (file: string, word: string): void => [...cardOf(file).querySelectorAll<HTMLButtonElement>(".kit-asked-foot button")].find((one) => one.textContent === word)!.click();
+  cardOf("q.md").querySelectorAll<HTMLInputElement>(".kit-option input")[0]!.click();
+  made.tell("context");
+  expect(cardOf("q.md").querySelectorAll<HTMLInputElement>(".kit-option input")[0]!.checked).toBe(true);
+  press("q.md", "Next question");
+  press("q.md", "Skip");
+  await settle();
+  expect(made.board.send).toHaveBeenCalledWith("Which supplier?\nYiwu A\n\nHow many?\nNot answered", { card: "q.md" });
+  press("s.md", "Skip");
+  press("s.md", "Skip");
+  await settle();
+  expect(made.board.send).toHaveBeenCalledTimes(1);
+  expect(made.held.get("s.md")!.text).toContain("done: dismissed\n");
+});
+
+it("dismisses a card that asks with options by its ×, sending nothing", async () => {
+  const made = open({ "q.md": FORM(ONE) });
+  await settle();
+  cardOf("q.md").querySelector<HTMLButtonElement>(".t-mark")!.click();
+  await settle();
+  expect(made.board.send).not.toHaveBeenCalled();
+  expect(made.held.get("q.md")!.text).toContain("done: dismissed\n");
+});
+
+it("says each question and its answer once under Done", async () => {
+  const answers = JSON.stringify(JSON.stringify({ form: "comchatx.options/1", answers: [{ chosen: ["Yiwu A"] }, null] }));
+  const made = open({ "q.md": FORM(TWO).replace("level: 2\n", `level: 2\ndone: answered\ndoneAt: 2026-11-10T09:00:00.000Z\nanswers: ${answers}\n`) });
+  await settle();
+  made.tell("focus", "q.md");
+  await settle();
+  expect([...document.querySelectorAll(".t-done p")].map((one) => one.textContent)).toEqual(["Which supplier?", "Yiwu A", "How many?", "Not answered"]);
+});
+
+const CONFIRM = (title: string, more = ""): string => `---\ntitle: ${title}\n${more}questions: ${JSON.stringify(JSON.stringify({ form: "comchatx.confirm/1", title }))}\n---\nThe kettle sells 6 a day.\n`;
+
+it("reads a saved answer only in its form's shape, so one in no shape draws from its words and invents no yes", async () => {
+  const done = (answer: string, answers: unknown): string => `done: answered\ndoneAt: 2026-11-10T09:00:00.000Z\nanswer: ${JSON.stringify(answer)}\nanswers: ${JSON.stringify(JSON.stringify(answers))}\n`;
+  const made = open({
+    "q.md": FORM(ONE).replace("level: 2\n", `level: 2\n${done("Ningbo B", { form: "comchatx.options/1", answers: [{ chosen: 5 }] })}`),
+    "c.md": CONFIRM("Ship 10 units?", done("No", { form: "comchatx.confirm/1", confirmed: "no" })),
+  });
+  await settle();
+  made.tell("focus", "q.md");
+  await settle();
+  made.tell("focus", "c.md");
+  await settle();
+  made.tell("context");
+  await settle();
+  const all = [...document.querySelectorAll(".t-done p")].map((one) => one.textContent);
+  expect(all).toEqual(expect.arrayContaining(["Who ships it?", "You: Ningbo B", "The kettle sells 6 a day.", "You: No"]));
+  expect(all).not.toContain("Yes");
+});
+
+it("sends a confirm as its question over the yes, and writes it onto no other question the file holds by then", async () => {
+  const made = open({ "c.md": CONFIRM("Ship 10 units?") });
+  await settle();
+  const sent = made.board.send.getMockImplementation()!;
+  made.board.send.mockImplementation(async (...asked) => { made.add("c.md", CONFIRM("Ship 500 units?")); return await sent(...asked); });
+  cardOf("c.md").querySelector<HTMLButtonElement>('[data-focus="yes"]')!.click();
+  await settle();
+  expect(made.board.send).toHaveBeenCalledWith("Ship 10 units?\nYes", { card: "c.md" });
+  expect(made.held.get("c.md")!.text).toBe(CONFIRM("Ship 500 units?"));
+});
+
+it("keeps the seller's picks, own words and place when the board refuses the send, and across a rewrite of the card's words alone", async () => {
+  const made = open({ "q.md": FORM(TWO) });
+  await settle();
+  const press = (name: string): void => cardOf("q.md").querySelector<HTMLElement>(`[data-focus="${name}"]`)!.click();
+  press("o1");
+  made.add("q.md", FORM(TWO).replace("Who ships it?", "Who ships it, and when?"));
+  made.tell("files");
+  await settle();
+  expect(cardOf("q.md").querySelector<HTMLInputElement>('[data-focus="o1"]')!.checked).toBe(true);
+  press("next");
+  press("other");
+  const own = cardOf("q.md").querySelector<HTMLInputElement>('[data-focus="own"]')!;
+  own.value = "  Keep these words  ";
+  own.dispatchEvent(new Event("input"));
+  made.refuse["send"] = ["busy"];
+  press("main");
+  await settle();
+  expect(cardOf("q.md").querySelector(".t-fail")).not.toBeNull();
+  expect(cardOf("q.md").querySelector(".kit-asked .entry-title")!.textContent).toContain("How many?");
+  expect(cardOf("q.md").querySelector<HTMLInputElement>('[data-focus="own"]')!.value).toBe("Keep these words");
+  press("previous");
+  expect(cardOf("q.md").querySelector<HTMLInputElement>('[data-focus="o1"]')!.checked).toBe(true);
+  press("next");
+  press("main");
+  await settle();
+  expect(made.board.send).toHaveBeenLastCalledWith("Which supplier?\nNingbo B\n\nHow many?\nKeep these words", { card: "q.md" });
+  expect(made.held.get("q.md")!.text).toContain("done: answered\n");
+});
+
+it("draws nothing and counts nothing until its first read is whole, and keeps every card it holds and its count while it reads again", async () => {
+  const files = { "a.md": TELL, "b.md": ASK, "c.md": "---\ntitle: Third\n---\nx\n" };
+  document.documentElement.dataset["locale"] = "en";
+  document.body.className = "kit";
+  document.body.innerHTML = BODY;
+  const made = stand(files);
+  const read = made.board.read.getMockImplementation()!;
+  let g = gate();
+  made.board.read.mockImplementation(async (file) => { if (file !== "b.md") await g.promise; return await read(file); });
+  Object.defineProperty(window, "cxBoard", { configurable: true, value: made.board });
+  new Function(KIT)();
+  new Function(SCRIPT)();
+  await settle();
+  expect([cards(), document.querySelector(".board-empty"), made.board.count.mock.calls]).toEqual([[], null, []]);
+  g.release();
+  await settle();
+  expect(cards()).toHaveLength(3);
+  expect(made.board.count.mock.calls).toEqual([[3, "1 to answer, 2 to read"]]);
+  g = gate();
+  for (const [file, text] of Object.entries(files)) made.add(file, text.replace("x", "y"));
+  made.tell("files");
+  await settle();
+  expect(cards()).toHaveLength(3);
+  expect(made.board.count.mock.calls).toHaveLength(1);
+  g.release();
+  await settle();
+  expect(cards()).toHaveLength(3);
+});
+
+it("draws the skill's own card that asks with options as the questionnaire it describes", async () => {
+  const skill = readFileSync(join(ROOT, "skills", "cx-board-tasks", "SKILL.md"), "utf8");
+  const example = /```markdown\n(---\n[^`]*questions: [^`]*)```/.exec(skill)![1]!;
+  open({ "kettle.md": example });
+  await settle();
+  expect([...cardOf("kettle.md").querySelectorAll(".kit-option-words")].map((one) => one.textContent)).toEqual(["Yiwu A$3.10 a unit, 12 days", "Ningbo B$3.40 a unit, 6 days", "Another answer"]);
 });
