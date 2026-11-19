@@ -1,6 +1,6 @@
 {
   "name": "@comchatx/cx-board-tasks",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Puts what cx found and what needs your answer in your Inbox.",
   "license": "MIT",
   "author": "ComChatX",
@@ -47,10 +47,8 @@
     },
     "skills": {
       "cx-board-tasks": {
-        "about": {
-          "en": "The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as read or answers.",
-          "zh": "告诉 cx 收件箱写什么、你的回答如何传回。"
-        }
+        "zh": "告诉 cx 收件箱写什么、你的回答如何传回。",
+        "en": "Tells cx what goes in your Inbox and how your answers come back."
       }
     },
     "builds": [
