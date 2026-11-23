@@ -29,6 +29,22 @@ function stand(files: Record<string, string>) {
     send: vi.fn(async (text: string, given?: { card?: string }) => { asked.push(["send", text, given?.card]); fail("send"); return "sent"; }),
     count: vi.fn(async (n: number, words?: string | null) => { asked.push(["count", n, words]); return undefined; }),
     draft: vi.fn(), show: vi.fn(async (name: string) => { asked.push(["show", name]); return undefined; }),
+    // The chat's message box as the board hands it: a field and its control; Enter or the control sends the field's words, which are
+    // emptied once the page's send is fulfilled with the same words still there, and stay where it is refused.
+    box: vi.fn(({ placeholder, send }: { placeholder: string; send: (text: string) => Promise<unknown> }) => {
+      const box = document.createElement("div");
+      box.className = "cx-box";
+      const field = document.createElement("textarea");
+      field.placeholder = placeholder;
+      const control = document.createElement("button");
+      control.type = "button";
+      control.setAttribute("aria-label", "Send");
+      const go = (): void => { const words = field.value; if (words.trim() === "") return; void (async () => send(words))().then(() => { if (field.value === words) field.value = ""; }, () => {}); };
+      field.addEventListener("keydown", (event) => { if (event.key !== "Enter" || event.shiftKey || event.isComposing) return; event.preventDefault(); go(); });
+      control.addEventListener("click", go);
+      box.append(field, control);
+      return box;
+    }),
   };
   const tell = (name: string, value?: unknown): void => { for (const one of hearing[name] ?? []) one(value); };
   return { board, held, refuse, asked, tell, add: (file: string, text: string) => { held.set(file, { text, modified: clock++ }); } };
@@ -50,7 +66,7 @@ afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); });
 /** A time `hours` before the run, so a done card stays in its week's recent rows whatever the day the tests run. */
 const ago = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString();
 const settle = async (): Promise<void> => { for (let n = 0; n < 20; n += 1) await new Promise((done) => setTimeout(done, 0)); };
-const cards = (): string[] => [...document.querySelectorAll<HTMLElement>(".t-card")].map((one) => `${one.querySelector(".entry-title")!.textContent} ${one.querySelector("input") === null ? "tells" : "asks"}`);
+const cards = (): string[] => [...document.querySelectorAll<HTMLElement>(".t-card")].map((one) => `${one.querySelector(".entry-title")!.textContent} ${one.querySelector<HTMLTextAreaElement>(".cx-box textarea") === null ? "tells" : "asks"}`);
 const cardOf = (file: string): HTMLElement => document.querySelector<HTMLElement>(`.t-card[data-file="${file}"]`)!;
 const heard = (): string | null => document.querySelector(".unseen[role=status]")!.textContent;
 
@@ -77,7 +93,7 @@ it("draws the cards that wait, those that ask first and each part newest first, 
 it("sends an answer as the seller's message naming its card, then marks the card answered in its own front matter and keeps every other line", async () => {
   const { board, held } = open({ "ask/restock.md": ASK });
   await settle();
-  const field = cardOf("ask/restock.md").querySelector<HTMLInputElement>("input")!;
+  const field = cardOf("ask/restock.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!;
   expect([field.getAttribute("aria-label"), field.placeholder]).toEqual(["Answer “Restock the blue kettle?”", "Answer cx"]);
   field.value = " Twenty units. ";
   field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
@@ -94,11 +110,11 @@ it("keeps the words and says the answer was not sent when the send is refused, a
   await settle();
   refuse["send"] = ["no_press"];
   const card = cardOf("b.md");
-  card.querySelector<HTMLInputElement>("input")!.value = "Twenty";
-  card.querySelector<HTMLButtonElement>(".t-reply button")!.click();
+  card.querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value = "Twenty";
+  card.querySelector<HTMLButtonElement>(".cx-box button")!.click();
   await settle();
   const again = cardOf("b.md");
-  expect([again.querySelector("input")!.value, again.querySelector(".t-fail")!.textContent, board.write.mock.calls.length, held.get("b.md")!.text]).toEqual(["Twenty", "Your answer was not sent.", 0, ASK]);
+  expect([again.querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value, again.querySelector(".t-fail")!.textContent, board.write.mock.calls.length, held.get("b.md")!.text]).toEqual(["Twenty", "Your answer was not sent.", 0, ASK]);
 });
 
 it("marks a card that tells as read, and a dismissed one as dismissed with a line that takes it back", async () => {
@@ -164,7 +180,7 @@ it("speaks the seller's language: the signed Chinese words", async () => {
   const { board } = open({ "b.md": ASK, "a.md": TELL }, "zh");
   await settle();
   const card = cardOf("b.md");
-  expect([card.querySelector("input")!.placeholder, card.querySelector(".t-reply button")!.textContent, card.querySelector(".t-mark")!.getAttribute("aria-label"), cardOf("a.md").querySelector(".t-mark")!.getAttribute("aria-label"), document.querySelector(".t-top .t-quiet")!.textContent]).toEqual(["回答 cx", "发送", "忽略“Restock the blue kettle?”", "标为已读“Storage fees rose”", "已处理"]);
+  expect([card.querySelector<HTMLTextAreaElement>(".cx-box textarea")!.placeholder, card.querySelector(".t-mark")!.getAttribute("aria-label"), cardOf("a.md").querySelector(".t-mark")!.getAttribute("aria-label"), document.querySelector(".t-top .t-quiet")!.textContent]).toEqual(["回答 cx", "忽略“Restock the blue kettle?”", "标为已读“Storage fees rose”", "已处理"]);
   expect(board.count).toHaveBeenLastCalledWith(2, "1 条待作答，1 条待查看");
 });
 
@@ -179,7 +195,7 @@ it("keeps what cx wrote to a card while its answer was on its way, and what it w
   await settle();
   let accept: (said: string) => void = () => {};
   made.board.send.mockImplementationOnce(() => new Promise<string>((done) => { accept = done; }));
-  const field = cardOf("b.md").querySelector<HTMLInputElement>("input")!;
+  const field = cardOf("b.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!;
   field.value = "Twenty";
   field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
   await settle();
@@ -201,14 +217,14 @@ it("keeps what cx wrote to a card while its answer was on its way, and what it w
 it("keeps the words typed in every card that has not sent them when the page draws again", async () => {
   const made = open({ "a.md": ASK, "b.md": ASK.replace("Restock the blue kettle?", "Raise the budget?") });
   await settle();
-  cardOf("a.md").querySelector<HTMLInputElement>("input")!.value = "Twenty";
-  const other = cardOf("b.md").querySelector<HTMLInputElement>("input")!;
+  cardOf("a.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value = "Twenty";
+  const other = cardOf("b.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!;
   other.value = "Yes";
   other.focus();
   made.add("c.md", TELL);
   made.tell("files");
   await settle();
-  expect([cardOf("a.md").querySelector("input")!.value, cardOf("b.md").querySelector("input")!.value]).toEqual(["Twenty", "Yes"]);
+  expect([cardOf("a.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value, cardOf("b.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value]).toEqual(["Twenty", "Yes"]);
 });
 
 it("takes an answered card from the list at the press, before its answer is sent, and sends it once", async () => {
@@ -216,9 +232,9 @@ it("takes an answered card from the list at the press, before its answer is sent
   await settle();
   let accept: (said: string) => void = () => {};
   made.board.send.mockImplementationOnce(() => new Promise<string>((done) => { accept = done; }));
-  const field = cardOf("b.md").querySelector<HTMLInputElement>("input")!;
+  const field = cardOf("b.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!;
   field.value = "Twenty";
-  cardOf("b.md").querySelector<HTMLButtonElement>(".t-reply button")!.click();
+  cardOf("b.md").querySelector<HTMLButtonElement>(".cx-box button")!.click();
   expect(cards()).toEqual([]);
   field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
   accept("sent");
@@ -240,11 +256,11 @@ it("brings a card back as it was when its mark is not written: a tick and a dism
   await settle();
   expect([cards(), document.querySelector(".t-gone"), document.querySelector(".t-fail")]).toEqual([["Restock the blue kettle? asks", "Storage fees rose tells"], null, null]);
   made.refuse["send"] = ["unavailable"];
-  cardOf("b.md").querySelector<HTMLInputElement>("input")!.value = "Twenty";
-  cardOf("b.md").querySelector<HTMLButtonElement>(".t-reply button")!.click();
+  cardOf("b.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value = "Twenty";
+  cardOf("b.md").querySelector<HTMLButtonElement>(".cx-box button")!.click();
   expect(cards()).toEqual(["Storage fees rose tells"]);
   await settle();
-  expect([cards(), cardOf("b.md").querySelector("input")!.value, cardOf("b.md").querySelector(".t-fail")!.textContent]).toEqual([["Restock the blue kettle? asks", "Storage fees rose tells"], "Twenty", "Your answer was not sent."]);
+  expect([cards(), cardOf("b.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value, cardOf("b.md").querySelector(".t-fail")!.textContent]).toEqual([["Restock the blue kettle? asks", "Storage fees rose tells"], "Twenty", "Your answer was not sent."]);
   expect([made.held.get("a.md")!.text, made.held.get("b.md")!.text]).toEqual([TELL, ASK]);
 });
 
@@ -253,7 +269,7 @@ it("draws an answered card where its file says once the next read comes, when th
   await settle();
   made.refuse["write"] = ["unavailable"];
   typeIn("b.md", "Twenty");
-  cardOf("b.md").querySelector<HTMLButtonElement>(".t-reply button")!.click();
+  cardOf("b.md").querySelector<HTMLButtonElement>(".cx-box button")!.click();
   expect(cards()).toEqual(["Storage fees rose tells"]);
   await settle();
   made.tell("files");
@@ -302,10 +318,20 @@ it("asks for the board by a card's own name when a read brings a waiting card it
   expect(made.board.show.mock.calls).toEqual([["x/newer.md"]]);
 });
 
-it("reaches a card's answer, then Send, then its dismiss by Tab", async () => {
+it("answers in the board's own message box, one a card for as long as the page lives, and draws no field or Send of its own", async () => {
+  const made = open({ "a.md": ASK, "b.md": ASK.replace("blue", "red"), "c.md": TELL });
+  await settle();
+  made.tell("files");
+  await settle();
+  expect(made.board.box.mock.calls.map(([given]) => given.placeholder)).toEqual(["Answer cx", "Answer cx"]);
+  expect([document.querySelectorAll(".t-card .cx-box").length, document.querySelectorAll(".t-card input[type=text]").length, cardOf("c.md").querySelector(".cx-box")]).toEqual([2, 0, null]);
+  expect([...cardOf("a.md").querySelector(".cx-box")!.children].map((one) => one.tagName)).toEqual(["TEXTAREA", "BUTTON"]);
+});
+
+it("reaches a card's answer, then the box's Send, then its dismiss by Tab", async () => {
   open({ "b.md": ASK });
   await settle();
-  const order = [...cardOf("b.md").querySelectorAll<HTMLElement>("input, button:not([hidden])")].map((one) => one.getAttribute("aria-label") ?? one.textContent);
+  const order = [...cardOf("b.md").querySelectorAll<HTMLElement>("input, textarea, button:not([hidden])")].map((one) => one.getAttribute("aria-label") ?? one.textContent);
   expect(order).toEqual(["Urgency: routine", "Answer “Restock the blue kettle?”", "Send", "Dismiss “Restock the blue kettle?”"]);
 });
 
@@ -339,7 +365,7 @@ it("keeps the keyboard on the card that had it when the page draws again", async
 });
 
 const gate = () => { let release!: () => void; const promise = new Promise<void>((done) => { release = done; }); return { promise, release }; };
-const typeIn = (file: string, words: string): HTMLInputElement => { const field = cardOf(file).querySelector<HTMLInputElement>("input")!; field.value = words; return field; };
+const typeIn = (file: string, words: string): HTMLTextAreaElement => { const field = cardOf(file).querySelector<HTMLTextAreaElement>(".cx-box textarea")!; field.value = words; return field; };
 
 it("keeps what the seller typed after a refused send over the words that were refused, when the page draws again", async () => {
   const made = open({ "a.md": ASK, "b.md": ASK });
@@ -350,8 +376,8 @@ it("keeps what the seller typed after a refused send over the words that were re
   typeIn("a.md", "New twenty");
   typeIn("b.md", "B draft").focus();
   made.tell("context", { width: 1280 });
-  expect(cardOf("a.md").querySelector("input")!.value).toBe("New twenty");
-  expect(cardOf("b.md").querySelector("input")!.value).toBe("B draft");
+  expect(cardOf("a.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value).toBe("New twenty");
+  expect(cardOf("b.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value).toBe("B draft");
 });
 
 it("keeps an unsent answer while the seller looks under Done and comes back", async () => {
@@ -360,7 +386,7 @@ it("keeps an unsent answer while the seller looks under Done and comes back", as
   typeIn("a.md", "Unsent while I read Done");
   document.querySelector<HTMLButtonElement>(".t-top button")!.click();
   document.querySelector<HTMLButtonElement>(".t-top button")!.click();
-  expect(cardOf("a.md").querySelector("input")!.value).toBe("Unsent while I read Done");
+  expect(cardOf("a.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value).toBe("Unsent while I read Done");
 });
 
 it("keeps the words the seller selected selected, in their direction, when the page draws again", async () => {
@@ -468,11 +494,11 @@ it("draws a done card's words by the same drawing when its row is opened", async
 it("says the answer field's placeholder in the page's language as it is now, not as it was when the field was made", async () => {
   const made = open({ "b.md": ASK });
   await settle();
-  expect(cardOf("b.md").querySelector("input")!.placeholder).toBe("Answer cx");
+  expect(cardOf("b.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!.placeholder).toBe("Answer cx");
   document.documentElement.dataset["locale"] = "zh";
   made.tell("context", { locale: "zh" });
   await settle();
-  expect(cardOf("b.md").querySelector("input")!.placeholder).toBe("回答 cx");
+  expect(cardOf("b.md").querySelector<HTMLTextAreaElement>(".cx-box textarea")!.placeholder).toBe("回答 cx");
 });
 
 /**

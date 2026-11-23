@@ -98,9 +98,6 @@
   /* A card that asks with options: the kit's questionnaire, its heading the question in front, clear of the × at the corner. */
   .t-form > .kit-asked > .entry-title { min-height: calc(var(--space-7) - var(--space-1)); padding-right: calc(var(--space-7) - var(--space-2) + var(--space-4)); font-weight: var(--weight-strong); }
   .t-form > .kit-asked > .entry-title + .t-meta { margin-top: calc(var(--space-1) - var(--space-4)); }
-  .t-reply { display: flex; align-items: center; gap: var(--space-4); }
-  .t-reply > .entry-field { flex: 1 1 auto; min-width: 0; }
-  .t-reply > button { flex: none; }
   .t-gone { display: flex; align-items: baseline; gap: var(--space-4); margin: 0; padding: 0 var(--space-5); color: var(--quiet); font-size: var(--size-small); line-height: var(--leading-small); }
   .t-gone > span { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .t-fail { margin: 0; color: var(--bad); font-size: var(--size-small); line-height: var(--leading-small); }
@@ -141,7 +138,7 @@
   // on main; the two presses, the ways, the levels and the groups of time (copy 678 c1, 681 §4 and c3, signed 2026-11-18).
   const W = {
     history: () => w("Done", "已处理"), back: () => w("Back", "返回"), search: () => w("Search", "搜索"),
-    reply: () => w("Answer cx", "回答 cx"), replyTo: (title) => named(w("Answer", "回答"), title), send: () => w("Send", "发送"),
+    reply: () => w("Answer cx", "回答 cx"), replyTo: (title) => named(w("Answer", "回答"), title),
     dismiss: () => w("Dismiss", "忽略"), dismissIt: (title) => named(w("Dismiss", "忽略"), title),
     tick: () => w("Mark as read", "已读"), tickIt: (title) => named(w("Mark as read", "标为已读"), title),
     undo: () => w("Undo", "撤销"), gone: (title) => named(w("Dismissed", "已忽略"), title),
@@ -382,16 +379,16 @@
   }
   /**
    * A reply is the seller's message to cx about the card: it goes as their message, naming the card, and the card is marked answered.
-   * A card that asks with options keeps what was chosen too, in the platform's form, `answers`.
+   * A card that asks with options keeps what was chosen too, in the platform's form, `answers`. Answers whether the words went.
    */
   async function answer(c, words, answers) {
-    if (S.busy.has(c.file)) return;
+    if (S.busy.has(c.file)) return false;
     const at = waiting().indexOf(c);
     S.busy.add(c.file);
     moved(c, "answered", words, answers);
     draw(); focusAfter(at);
     try { await board.send(words, { card: c.file }); }
-    catch { S.cards.set(c.file, c); S.busy.delete(c.file); S.failed.add(c.file); if (answers !== undefined && c.form !== undefined) S.asking.set(c.file, asking(c, answers)); draw(); (S.fields.get(c.file) ?? document.getElementById(idOf(c.file)))?.focus(); return; }
+    catch { S.cards.set(c.file, c); S.busy.delete(c.file); S.failed.add(c.file); if (answers !== undefined && c.form !== undefined) S.asking.set(c.file, asking(c, answers)); draw(); (S.fields.get(c.file)?.querySelector("textarea") ?? document.getElementById(idOf(c.file)))?.focus(); return false; }
     S.failed.delete(c.file);
     S.fields.delete(c.file);
     S.asking.delete(c.file);
@@ -400,6 +397,7 @@
     try { await mark(c, "answered", words, answers); } catch { S.cards.set(c.file, c); }
     S.busy.delete(c.file);
     draw();
+    return true;
   }
   /** Dismissed, a card leaves and nothing is sent. A line stands where it stood until the list is next drawn anew, and takes it back. */
   async function dismiss(c) {
@@ -536,7 +534,7 @@
     const failed = S.failed.has(c.file);
     const words = wordsOf(c, { class: `t-words entry-body${whole ? "" : " cut"}`, dir: "auto" });
     const more = h("button", { type: "button", class: "t-quiet t-more", "aria-expanded": String(whole), hidden: !whole, onclick: () => { if (whole) S.whole.delete(c.file); else S.whole.add(c.file); draw(); document.getElementById(id)?.querySelector(".t-more")?.focus(); } }, h("span", {}, whole ? W.less() : W.more()));
-    const field = c.asks && fieldOf(c.file);
+    const box = c.asks && fieldOf(c.file), field = box && box.querySelector("textarea");
     if (field) { field.disabled = busy; field.placeholder = W.reply(); field.setAttribute("aria-label", W.replyTo(c.title)); if (failed) field.setAttribute("aria-describedby", `${id}-fail`); else field.removeAttribute("aria-describedby"); }
     // An asking card's × comes after its answer and Send, so Tab meets them first; it is drawn at the card's corner all the same.
     return h("li", {}, h("article", { class: `entry t-card${c.asks ? " t-asks" : ""}`, id, tabindex: "-1", "data-file": c.file },
@@ -545,7 +543,7 @@
         !c.asks && markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), busy)),
       meta(c),
       words, more,
-      field && h("div", { class: "t-reply" }, field, h("button", { type: "button", class: "primary", disabled: busy, onclick: () => sendFrom(c.file) }, W.send())),
+      box,
       failed && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent()),
       c.asks && markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy)));
   }
@@ -593,9 +591,15 @@
       failed && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent()),
       markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy)));
   }
-  /** A card's field is one element for as long as the page lives, so the browser keeps its words, caret and selection across a draw. */
-  const fieldOf = (file) => S.fields.get(file) ?? S.fields.set(file, h("input", { type: "text", class: "entry-field", dir: "auto", placeholder: W.reply(), autocomplete: "off", onkeydown: (event) => { if (event.key === "Enter" && !event.isComposing) sendFrom(file); } })).get(file);
-  const sendFrom = (file) => { const c = S.cards.get(file), words = S.fields.get(file)?.value.trim(); if (c !== undefined && words) void answer(c, words); };
+  /**
+   * A card's answer box is the chat's own, as the board hands every page one (`cxBoard.box`): one element for as long as the page lives,
+   * so the browser keeps its words, caret and selection across a draw. Words that did not go stay in it.
+   */
+  const fieldOf = (file) => S.fields.get(file) ?? S.fields.set(file, board.box({ placeholder: W.reply(), send: async (words) => {
+    const c = S.cards.get(file), text = words.trim();
+    if (c === undefined || text === "") return;
+    if (!(await answer(c, text))) throw new Error("unsent");
+  } })).get(file);
   const goneLine = (file) => keep(`gone:${file}`, [S.gone.get(file).title, S.busy.has(file), Kit.lang].join("|"), () => goneOf(file));
   function goneOf(file) {
     const { title } = S.gone.get(file);
@@ -743,7 +747,7 @@
   const folded = new WeakMap();
   function draw() {
     if (!S.ready) { page.replaceChildren(status); return; }
-    const typing = document.activeElement?.matches?.(".t-card input") ? document.activeElement : undefined;
+    const typing = document.activeElement?.matches?.(".t-card input, .t-card textarea") ? document.activeElement : undefined;
     const held = typing === undefined && document.activeElement?.matches?.(".t-card, .t-open") ? document.activeElement.closest("[id]")?.id : undefined;
     keeping = new Set();
     sync(page, [S.view === "history" ? historyView() : nowView(), status]);
