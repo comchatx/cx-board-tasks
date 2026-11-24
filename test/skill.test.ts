@@ -36,9 +36,9 @@ it("states facts and no procedure: no step tells cx when to write a card, and no
   for (const gone of ["交给 cx", "Send to cx", "you should", "always ", "must ", "`choice` or an `input` entry"]) expect(skill, gone).not.toContain(gone);
 });
 
-it("says which card stands first and in what order the rest stand, as the page draws them", () => {
-  expect(skill).toContain("`reply: true` makes the card your answer to the seller's last message: the Inbox shows the newest such card first.");
-  expect(skill).toContain("Then the cards, as the seller groups and orders them with 分组 / Grouping and 排序 / Ordering, by kind, by urgency or by time. Until the seller picks, the cards that ask stand before those that tell, the more urgent first in each and then the newest.");
+it("says in what order the cards stand, as the page draws them, and gives no card a place of its own", () => {
+  expect(skill).not.toContain("reply: true");
+  expect(skill).toContain("The cards stand as the seller groups and orders them with 分组 / Grouping and 排序 / Ordering, by kind, by urgency or by time. Until the seller picks, the cards that ask stand before those that tell, the more urgent first in each and then the newest.");
   expect(skill).toContain("The seller may dismiss a card that asks, 忽略 / Dismiss.");
 });
 
