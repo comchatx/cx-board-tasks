@@ -43,8 +43,7 @@ Both can ship 500 by the end of the month.
 
 - Each question has `words` and `options`, each option a `name` and, where it helps, a `line` under it. An answer names the options by their names, so the names in one question differ. `"several": true` lets the seller pick more than one; `"own": false` takes away the last row, where the seller writes their own answer. With several questions the seller may skip one, 跳过 / Skip; a card with every question skipped is dismissed and nothing comes to you.
 - A `comchatx.confirm/1` card has a `title`, the thing proposed, and may have a `message`, what will happen; the seller answers 是 / Yes or 否 / No.
-- `reply: true` makes the card your answer to the seller's last message: the Inbox shows the newest such card first.
-- Then the cards, as the seller groups and orders them with 分组 / Grouping and 排序 / Ordering, by kind, by urgency or by time. Until the seller picks, the cards that ask stand before those that tell, the more urgent first in each and then the newest. The seller reads each card on its own.
+- The cards stand as the seller groups and orders them with 分组 / Grouping and 排序 / Ordering, by kind, by urgency or by time. Until the seller picks, the cards that ask stand before those that tell, the more urgent first in each and then the newest. The seller reads each card on its own.
 - A card does not hold your turn. You go on, and the seller answers when they come to it.
 - When a new card lands, the Inbox asks for the board to be shown: the column opens on the Inbox, waits while the seller is typing where it would cover the chat, and stays shut once the seller has closed what such an ask opened.
 

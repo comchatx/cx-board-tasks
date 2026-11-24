@@ -335,23 +335,15 @@ it("reaches a card's answer, then the box's Send, then its dismiss by Tab", asyn
   expect(order).toEqual(["Urgency: routine", "Answer “Restock the blue kettle?”", "Send", "Dismiss “Restock the blue kettle?”"]);
 });
 
-it("puts cx's answer to the seller's last message first, the newest card that says it is one, over those that ask", async () => {
-  open({
-    "fee.md": "---\ntitle: The fee is $3.86 a unit\nreply: true\n---\nFrom the fee preview.\n",
-    "b.md": ASK,
-    "a.md": TELL,
-  });
+it("stands a card that carries `reply: true` in its column by the ordinary order, with nothing above the columns", async () => {
+  const made = open({ "b.md": ASK, "a.md": TELL });
   await settle();
-  expect(cards()).toEqual(["The fee is $3.86 a unit tells", "Restock the blue kettle? asks", "Storage fees rose tells"]);
-});
-
-it("puts only the newest reply first, an older one in its part", async () => {
-  const made = open({ "old.md": "---\ntitle: Old answer\nreply: true\n---\nx\n", "b.md": ASK });
-  await settle();
-  made.add("new.md", "---\ntitle: New answer\nreply: true\n---\ny\n");
+  made.add("fee.md", "---\ntitle: The fee is $3.86 a unit\nreply: true\n---\nFrom the fee preview.\n");
   made.tell("files");
   await settle();
-  expect(cards()).toEqual(["New answer tells", "Restock the blue kettle? asks", "Old answer tells"]);
+  expect(cards()).toEqual(["Restock the blue kettle? asks", "The fee is $3.86 a unit tells", "Storage fees rose tells"]);
+  expect(document.querySelector(".t-all")!.children.length).toBe(1);
+  expect(cardOf("fee.md").closest(".t-part")).toBe(cardOf("a.md").closest(".t-part"));
 });
 
 it("keeps the keyboard on the card that had it when the page draws again", async () => {

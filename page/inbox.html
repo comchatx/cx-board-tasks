@@ -23,12 +23,10 @@
   @container (min-width: 41.5rem) {
     .t-c2 .t-parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-7); align-items: start; }
     .t-c2 .t-part.t-none { display: flex; }
-    .t-c2 .t-first { width: calc(50% - var(--space-7) / 2); }
   }
   @container (min-width: 63rem) {
     .t-c3 .t-parts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: var(--space-7); row-gap: var(--space-6); align-items: start; }
     .t-c3 .t-part.t-none { display: flex; }
-    .t-c3 .t-first { width: calc((100% - 2 * var(--space-7)) / 3); }
   }
   /* A column has a ground of its own, its heading at the head of it in the card title's weight, the count beside it in quiet. */
   .t-parthead { display: none; align-items: center; gap: var(--space-4); min-height: var(--space-7); }
@@ -218,7 +216,7 @@
     const answers = json(keys.get("answers") ?? "");
     return {
       file, modified, text, title, words, body: rest, form, answers: answersOf(answers, form),
-      asks: form !== undefined || keys.get("asks") === "true" || ASKING.has(keys.get("kind")), reply: keys.get("reply") === "true",
+      asks: form !== undefined || keys.get("asks") === "true" || ASKING.has(keys.get("kind")),
       level: ["1", "2", "3"].includes(keys.get("level")) ? Number(keys.get("level")) : 1,
       done, doneAt: Number.isFinite(at) ? at : modified, answer: keys.get("answer"),
     };
@@ -344,14 +342,11 @@
   function groupOf(at) { const ago = Math.round((startOf(Date.now()) - startOf(at)) / (24 * 60 * 60 * 1000)); return ago <= 0 ? "today" : ago <= 3 ? "three" : "older"; }
   const keyOf = (way, c, at = c.modified) => (way === "kind" ? (c.asks ? "asks" : "tells") : way === "level" ? String(rank(c)) : groupOf(at));
   const FIRST = { level: (a, b) => rank(b) - rank(a), time: () => 0, kind: (a, b) => Number(b.asks) - Number(a.asks) };
-  /** What waits: cx's answer to the seller's last message first (15 A), the newest card that says it is one; then a column after a column, each in its order. */
+  /** What waits: a column after a column, each in its order. */
   function waiting() {
-    const open = [...S.cards.values()].filter((c) => c.done === undefined);
-    const reply = open.filter((c) => c.reply).sort((a, b) => b.modified - a.modified)[0];
-    const rest = open.filter((c) => c !== reply);
     const column = (c) => KEYS[P.by].indexOf(keyOf(P.by, c));
-    rest.sort((a, b) => column(a) - column(b) || FIRST[P.in](a, b) || b.modified - a.modified);
-    return [...(reply === undefined ? [] : [reply]), ...rest];
+    return [...S.cards.values()].filter((c) => c.done === undefined)
+      .sort((a, b) => column(a) - column(b) || FIRST[P.in](a, b) || b.modified - a.modified);
   }
   const done = () => [...S.cards.values()].filter((c) => c.done !== undefined).sort((a, b) => b.doneAt - a.doneAt);
 
@@ -643,14 +638,12 @@
   const headSaid = new WeakMap();
   function nowView() {
     const list = waiting();
-    // The first card alone where it answers the seller's last message, then a column a key; a dismissed card's line stays in its column.
-    const first = list[0]?.reply ? list[0] : undefined;
-    const rest = list.filter((c) => c !== first);
+    // A column a key; a dismissed card's line stays in its column.
     const cols = new Map(KEYS[P.by].map((key) => [key, []]));
     const put = (c, row, counts) => cols.get(keyOf(P.by, c)).push({ row, counts });
     const lines = [...S.gone.entries()].sort((a, b) => a[1].at - b[1].at);
     const gone = (file) => { const c = S.cards.get(file); if (c !== undefined) put(c, goneLine(file), false); };
-    list.forEach((c, k) => { while (lines.length > 0 && lines[0][1].at <= k) gone(lines.shift()[0]); if (c !== first) put(c, card(c), true); });
+    list.forEach((c, k) => { while (lines.length > 0 && lines[0][1].at <= k) gone(lines.shift()[0]); put(c, card(c), true); });
     for (const [file] of lines) gone(file);
     // By kind, a column a kind only where both wait; by urgency or time, every column, one with no card standing empty where three fit.
     const three = P.by !== "kind";
@@ -671,11 +664,9 @@
     if (list.length === 0 && S.gone.size === 0) out.push(keep("empty", [S.cards.size > 0, Kit.lang].join("|"), () => h("p", { class: "board-empty" }, S.cards.size > 0 ? W.none() : W.noneYet())));
     else {
       const all = keep("all", "", () => h("div", { class: "t-all" }));
-      const head = first && keep("first", "", () => h("ul", { class: "t-list t-first" }));
-      if (head) sync(head, [card(first)]);
-      const parts = rest.length + S.gone.size > 0 && keep("parts", "", () => h("div", { class: "t-parts" }));
-      if (parts) sync(parts, shown.map(column));
-      sync(all, [head, parts]);
+      const parts = keep("parts", "", () => h("div", { class: "t-parts" }));
+      sync(parts, shown.map(column));
+      sync(all, [parts]);
       out.push(all);
     }
     return out;
