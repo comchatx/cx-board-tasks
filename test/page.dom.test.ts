@@ -21,7 +21,7 @@ function stand(files: Record<string, string>) {
   const fail = (verb: string): void => { const reason = refuse[verb]?.shift(); if (reason !== undefined) throw new Error(reason); };
   const asked: [string, ...unknown[]][] = [];
   const board = {
-    context: { theme: "light", locale: "en", width: 400 },
+    context: { theme: "light", locale: "en", width: 400, quote: false },
     on: (name: string, listener: (value?: unknown) => void) => { hearing[name]?.push(listener); },
     open: vi.fn(async (given: { file: string }) => { asked.push(["open", given.file]); return undefined; }),
     list: vi.fn(async () => { asked.push(["list"]); fail("list"); return [...held].map(([file, one]) => ({ file, modified: one.modified, size: one.text.length })); }),
@@ -971,6 +971,23 @@ it("copies a card's title and words at its corner, says 已复制 by a tick for 
   press().click();
   await vi.advanceTimersByTimeAsync(0);
   expect(press().getAttribute("aria-label")).toBe("复制“Storage fees rose”");
+});
+
+it("quotes a card whole at its corner, 引用 before 复制, where a chat takes a quote, and draws no 引用 where none does", async () => {
+  const quote = vi.fn(async (_given: unknown) => "quoted");
+  const made = open({ "a.md": TELL, "b.md": ASK }, "zh", { quote, context: { theme: "light", locale: "zh", width: 400, quote: true } });
+  await settle();
+  const marks = (file: string): string[] => [...cardOf(file).querySelectorAll<HTMLButtonElement>(".t-mark")].map((one) => one.getAttribute("aria-label")!);
+  expect(marks("a.md").slice(0, 2)).toEqual(["引用“Storage fees rose”", "复制“Storage fees rose”"]);
+  expect(marks("b.md").slice(0, 2)).toEqual(["引用“Restock the blue kettle?”", "复制“Restock the blue kettle?”"]);
+  cardOf("a.md").querySelector<HTMLButtonElement>(".t-quote")!.click();
+  expect(quote.mock.calls).toEqual([[{ text: "Storage fees rose\n\nUp $41.20 on August.", card: "a.md", title: "Storage fees rose", whole: true }]]);
+  expect(made.held.get("a.md")!.text).toBe(TELL);
+
+  made.board.context = { theme: "light", locale: "zh", width: 400, quote: false };
+  made.tell("context", made.board.context);
+  await settle();
+  expect(cardOf("a.md").querySelector(".t-quote")).toBeNull();
 });
 
 it("opens a card's urgency menu at its mark or by ↓, writes the one picked into the card's head with the card's own time, and moves the card", async () => {

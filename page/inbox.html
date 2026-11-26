@@ -165,8 +165,9 @@
      presses at its head open theirs. */
   .t-head > .t-acts { flex: none; display: inline-flex; align-items: center; gap: var(--space-2); margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 0; }
   .t-head > .t-acts > .t-mark { margin: 0; }
+  .t-card.t-form > .t-quote { position: absolute; top: calc(var(--space-6) - var(--space-1)); right: calc(var(--space-6) - var(--space-2) + 2 * (var(--space-7) + var(--space-2))); margin: 0; }
   .t-card.t-form > .t-copy { position: absolute; top: calc(var(--space-6) - var(--space-1)); right: calc(var(--space-6) - var(--space-2) + var(--space-7) + var(--space-2)); margin: 0; }
-  .t-form > .kit-asked > .entry-title { padding-right: calc(2 * var(--space-7) + var(--space-2) - var(--space-2) + var(--space-4)); }
+  .t-form > .kit-asked > .entry-title { padding-right: calc(3 * var(--space-7) + 2 * var(--space-2) - var(--space-2) + var(--space-4)); }
   .t-meta { position: relative; }
   .t-levels { min-width: 9rem; }
   /* A card not yet opened carries the board's own dot, the one a tab carries while it holds something not seen, in the
@@ -217,7 +218,7 @@
   const named = (verb, title) => w(`${verb} “${title}”`, `${verb}“${title}”`);
   const GLYPH = {
     out: ["M6.5 6.5l11 11", "M17.5 6.5l-11 11"], tick: ["M5 12.5l4.5 4.5L19 7.5"], past: ["M12 4a8 8 0 1 0 0 16a8 8 0 0 0 0-16z", "M12 8v4.5l3 1.5"],
-    back: ["M14.5 6l-6 6l6 6"], copy: ["M9 9h10v11H9z", "M5 15V4h10"], download: ["M12 4v11", "M7.5 10.5L12 15l4.5-4.5", "M5 19.5h14"], tray: ["M5.5 4.5h13a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z", "M3.5 13h5l1.5 2.5h4l1.5-2.5h5"], sort: ["M5 7h14", "M7.5 12h9", "M10 17h4"], cols: ["M4.5 5.5h4v13h-4z", "M10 5.5h4v13h-4z", "M15.5 5.5h4v13h-4z"], down: ["M7 10l5 5l5-5"],
+    back: ["M14.5 6l-6 6l6 6"], copy: ["M9 9h10v11H9z", "M5 15V4h10"], quote: ["M10 6.5C7 7.5 5 9.8 5 13v4.5h5V13H7.2", "M19 6.5c-3 1-5 3.3-5 6.5v4.5h5V13h-2.8"], download: ["M12 4v11", "M7.5 10.5L12 15l4.5-4.5", "M5 19.5h14"], tray: ["M5.5 4.5h13a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z", "M3.5 13h5l1.5 2.5h4l1.5-2.5h5"], sort: ["M5 7h14", "M7.5 12h9", "M10 17h4"], cols: ["M4.5 5.5h4v13h-4z", "M10 5.5h4v13h-4z", "M15.5 5.5h4v13h-4z"], down: ["M7 10l5 5l5-5"],
   };
   // The signed words: comchatx `spikes/board/README.md` rows 2 to 17 and 25 to 44 (2026-11-11); the option card's lines by their keys
   // on main; the two presses, the ways, the levels and the groups of time (copy 678 c1, 681 §4 and c3, signed 2026-11-18).
@@ -253,6 +254,8 @@
     kinds: { asks: () => w("Questions", "提问"), tells: () => w("Updates", "汇报") },
     // The chat's own words for the control of its row, `quote.copy` and `quote.copied` on main.
     copy: () => w("Copy", "复制"), copied: () => w("Copied", "已复制"),
+    // The chat's `quote.quote`, and `quote.card` by `named`.
+    quote: () => w("Quote", "引用"),
     // The Inbox that has never held a card: what this place is for, and how to have cx put something in it.
     noneYetTitle: () => w("Nothing needs your review yet", "还没有要你处理的事"),
     noneYet: () => w("Ask cx to put what it finds and what needs your decision here.", "让 cx 把发现和要你决定的事放在这里。"),
@@ -578,6 +581,8 @@
   }
   /** 复制 puts the card's title and words on the clipboard and says 已复制 for a moment, to the eye and to a screen reader, as the chat's row does. */
   const COPIED_MS = 1500;
+  // What the board takes in a quote: a title of at most 80 characters, words of at most 2,000.
+  const TITLE_MAX = 80, SAID_MAX = 2000;
   async function copy(c) {
     const text = `${c.title}\n\n${c.body.trim()}`;
     try { await navigator.clipboard.writeText(text); } catch { return; } // a board that does not let the page write the clipboard: no tick, nothing said
@@ -709,8 +714,17 @@
     const done = S.copied === c.file;
     return h("button", { type: "button", class: "t-mark t-copy", title: done ? W.copied() : W.copy(), "aria-label": done ? W.copied() : named(W.copy(), c.title), onclick: () => void copy(c) }, icon(...GLYPH[done ? "tick" : "copy"]));
   }
-  /** The acts at a card's corner: 复制, then the card's own ✓ where it tells (a card that asks has its × at the corner after its box). */
-  const acts = (c) => h("span", { class: "t-acts" }, copyMark(c), !c.asks && markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), S.busy.has(c.file)));
+  /** 引用, the chat's quote of a message: the whole card goes over the message box, and the chat writes where it came from. A board
+   *  window of its own has no message box, so the press is not drawn there. */
+  const quotes = () => board.context?.quote === true;
+  function quoteMark(c) {
+    if (!quotes()) return undefined;
+    const title = c.title.slice(0, TITLE_MAX), text = `${c.title}\n\n${c.body.trim()}`.slice(0, SAID_MAX);
+    return h("button", { type: "button", class: "t-mark t-quote", title: W.quote(), "aria-label": named(W.quote(), c.title),
+      onclick: () => void board.quote({ text, card: c.file, title, whole: true }).catch(() => {}) }, icon(...GLYPH.quote));
+  }
+  /** The acts at a card's corner: 引用 and 复制, then the card's own ✓ where it tells (a card that asks has its × at the corner after its box). */
+  const acts = (c) => h("span", { class: "t-acts" }, quoteMark(c), copyMark(c), !c.asks && markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), S.busy.has(c.file)));
   /** The card's title, the press that opens the whole card on a tab of its own, by the road a file's tab is; it opens the card, so its dot goes.
    *  A card not opened is named as main names a tab with something not seen (「{name}，有新内容」, "{name}, new"): its title, then the state. */
   const nameOf = (c, words = [c.title]) => h("button", { type: "button", class: "t-name", dir: "auto", "aria-label": seen(c) ? undefined : W.unreadName(c.title), onclick: () => { see(c); void board.open({ file: c.file }).catch(() => {}); } },
@@ -721,10 +735,10 @@
     if (c.form !== undefined) {
       let asked = S.asking.get(c.file);
       if (asked === undefined || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c));
-      return keep(`card:${c.file}`, [c.modified, c.level, asked.n, S.busy.has(c.file), S.failed.has(c.file), S.levels === c.file, S.copied === c.file, seen(c)].join("|"), () => askingCard(c));
+      return keep(`card:${c.file}`, [c.modified, c.level, asked.n, S.busy.has(c.file), S.failed.has(c.file), S.levels === c.file, S.copied === c.file, seen(c), quotes()].join("|"), () => askingCard(c));
     }
     askWords(c);
-    return keep(`card:${c.file}`, [c.modified, c.level, Kit.lang, S.busy.has(c.file), S.failed.has(c.file), drawnOf(c), S.levels === c.file, S.copied === c.file, seen(c)].join("|"), () => cardOf(c));
+    return keep(`card:${c.file}`, [c.modified, c.level, Kit.lang, S.busy.has(c.file), S.failed.has(c.file), drawnOf(c), S.levels === c.file, S.copied === c.file, seen(c), quotes()].join("|"), () => cardOf(c));
   }
   function cardOf(c) {
     const busy = S.busy.has(c.file), id = idOf(c.file);
@@ -794,7 +808,7 @@
     else { asked.under.replaceChildren(...meta(c).childNodes); asked.modified = c.modified; }
     asked.titled();
     return h("li", {}, h("article", { class: `entry t-card t-asks t-form${seen(c) ? "" : " t-new"}`, id, tabindex: "-1", "data-file": c.file },
-      asked.element, copyMark(c),
+      asked.element, quoteMark(c), copyMark(c),
       failed && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent()),
       markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy)));
   }
