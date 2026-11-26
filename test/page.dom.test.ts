@@ -23,7 +23,7 @@ function stand(files: Record<string, string>) {
   const board = {
     context: { theme: "light", locale: "en", width: 400 },
     on: (name: string, listener: (value?: unknown) => void) => { hearing[name]?.push(listener); },
-    open: vi.fn(async (file: string) => { asked.push(["open", file]); return undefined; }),
+    open: vi.fn(async (given: { file: string }) => { asked.push(["open", given.file]); return undefined; }),
     list: vi.fn(async () => { asked.push(["list"]); fail("list"); return [...held].map(([file, one]) => ({ file, modified: one.modified, size: one.text.length })); }),
     read: vi.fn(async (file: string) => { asked.push(["read", file]); fail("read"); const one = held.get(file); if (one === undefined) throw new Error("no_file"); return one.text; }),
     write: vi.fn(async (file: string, text: string) => { asked.push(["write", file, text]); fail("write"); const modified = clock++; held.set(file, { text, modified }); return { modified, size: text.length }; }),
@@ -1051,7 +1051,7 @@ it("keeps each question's words in the title press of a card that asks with seve
 it("draws the whole card the board hands it on a tab of its own, titled by the card's head, its words under the board's rules for a read whole, and answers it there", async () => {
   const made = open({ "b.md": ASK }, "en", { markdown: async (text: string) => `<p>${text.trim()}</p>` });
   await settle();
-  made.tell("file", { path: "b.md", name: "b.md", modified: made.held.get("b.md")!.modified, text: ASK });
+  made.tell("file", { path: "board/acct/inbox/b.md", name: "b.md", tab: "待办", file: "b.md", modified: made.held.get("b.md")!.modified, text: ASK });
   await settle();
   const page = document.querySelector<HTMLElement>(".t-page")!;
   expect([page.querySelector("h1")!.textContent, page.querySelector(".t-page-words")!.classList.contains("markdown-body"), document.querySelectorAll(".t-card:not(.t-page)").length]).toEqual(["Restock the blue kettle?", true, 0]);

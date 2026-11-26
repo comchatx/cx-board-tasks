@@ -713,7 +713,7 @@
   const acts = (c) => h("span", { class: "t-acts" }, copyMark(c), !c.asks && markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), S.busy.has(c.file)));
   /** The card's title, the press that opens the whole card on a tab of its own, by the road a file's tab is; it opens the card, so its dot goes.
    *  A card not opened is named as main names a tab with something not seen (「{name}，有新内容」, "{name}, new"): its title, then the state. */
-  const nameOf = (c, words = [c.title]) => h("button", { type: "button", class: "t-name", dir: "auto", "aria-label": seen(c) ? undefined : W.unreadName(c.title), onclick: () => { see(c); void board.open(c.file).catch(() => {}); } },
+  const nameOf = (c, words = [c.title]) => h("button", { type: "button", class: "t-name", dir: "auto", "aria-label": seen(c) ? undefined : W.unreadName(c.title), onclick: () => { see(c); void board.open({ file: c.file }).catch(() => {}); } },
     h("span", {}, ...words));
 
   /** A waiting card's element, built again when its file, the language, its fold, a press on it or the drawing of its words changed. */
@@ -1006,8 +1006,9 @@
     }
   }
 
-  // The board opens a card's file on a tab of its own with this page, as it opens a file with its viewer, and hands it the file.
-  board.on("file", (file) => { if (typeof file.text === "string" && !S.cards.has(file.path)) S.cards.set(file.path, readCard(file.path, file.modified, file.text)); S.alone = file.path; S.view = "card"; draw(); });
+  // The board opens a card's file on a tab of its own with this page, as it opens a file with its viewer, and hands it the file: `file`
+  // is its path in the Inbox's tab, the name the page's list gives it.
+  board.on("file", (given) => { const file = given.file; if (typeof file !== "string") return; if (typeof given.text === "string" && !S.cards.has(file)) S.cards.set(file, readCard(file, given.modified, given.text)); S.alone = file; S.view = "card"; draw(); });
   /** Whether a card's answer has outgrown the box's resting size, measured as it is typed and at each drawing. */
   function long(card) { const field = card.querySelector(".cx-box textarea"); if (!field) return; field.dataset.rest ??= field.value === "" ? String(field.offsetHeight) : ""; card.classList.toggle("t-long", field.dataset.rest !== "" && field.offsetHeight > Number(field.dataset.rest) + 1); }
   page.addEventListener("input", (event) => { const card = event.target.closest?.(".entry.t-card"); if (card) long(card); });
