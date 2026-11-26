@@ -16,7 +16,7 @@ it("tells cx how an answer comes back: the seller's words, then the line naming 
 });
 
 it("gives the page's names as signed, and the skill's row as signed, its first sentence", () => {
-  expect(skill).toContain("收件箱 / Inbox, 已处理 / Done, 已读 / Mark as read, 忽略 / Dismiss, 分组 / Grouping, 排序 / Ordering.");
+  expect(skill).toContain("收件箱 / Inbox, 已处理 / Done, 完成 / Done for the tick, 忽略 / Dismiss, 分组 / Grouping, 排序 / Ordering.");
   expect(skill).toContain("description: The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as read or answers. ");
 });
 
@@ -38,7 +38,7 @@ it("states facts and no procedure: no step tells cx when to write a card, and no
 
 it("says in what order the cards stand, as the page draws them, and gives no card a place of its own", () => {
   expect(skill).not.toContain("reply: true");
-  expect(skill).toContain("The cards stand as the seller groups and orders them with 分组 / Grouping and 排序 / Ordering, by kind, by urgency or by time. Until the seller picks, the cards that ask stand before those that tell, the more urgent first in each and then the newest.");
+  expect(skill).toContain("The cards stand as the seller groups and orders them with 分组 / Grouping and 排序 / Ordering, by kind, by urgency, by time or by whether they have opened the card. Until the seller picks, the cards that ask stand before those that tell, the more urgent first in each and then the newest.");
   expect(skill).toContain("The seller may dismiss a card that asks, 忽略 / Dismiss.");
 });
 
@@ -52,14 +52,15 @@ it("tells cx that the Inbox asks for the board when a card lands, and what bound
   expect(skill).toContain("When a new card lands, the Inbox asks for the board to be shown: the column opens on the Inbox, waits while the seller is typing where it would cover the chat, and stays shut once the seller has closed what such an ask opened.");
 });
 
-it("points to the board's skill for a card's level, and says a card without it is routine", () => {
-  expect(skill).toContain("`level` says how urgent the card is, as the `cx-board` skill says: the Inbox marks each card by it, and a card without it is 常规 / Routine.");
+it("points to the board's skill for a card's level, says a card without it is routine, and that the seller may change it and the Inbox writes it with the card's time", () => {
+  expect(skill).toContain("`level` says how urgent the card is, as the `cx-board` skill says: the Inbox marks each card by it, a card without it is 常规 / Routine, and the seller may change it.");
+  expect(skill).toContain("- `level`, where the seller changed it;\n- `written`, the time the card had before the Inbox first wrote it, so it keeps its place and its time;");
 });
 
 it("tells cx how a card asks with options, in the platform's forms, and how its answer is kept and comes back", () => {
   for (const said of ["`questions` makes the card one that asks with options", "`comchatx.options/1`", "`comchatx.confirm/1`", '"several": true', '"own": false', "跳过 / Skip; a card with every question skipped is dismissed and nothing comes to you.", "`answers`, on a card that asks with options", "未作答 / Not answered"]) expect(skill, said).toContain(said);
 });
 
-it("says the seller's grouping and ordering is kept in inbox.json, which is no card", () => {
-  expect(skill).toContain("How the seller groups and orders the cards is kept in `待办/inbox.json`. It is not a card: leave it as it is.");
+it("says the seller's grouping and ordering is kept in inbox.json and the cards opened in inbox-opened.json, neither of them a card", () => {
+  expect(skill).toContain("How the seller groups and orders the cards is kept in `待办/inbox.json`, and which cards they have opened in `待办/inbox-opened.json`: a card you write again shows as unread again. Neither is a card: leave them as they are.");
 });
