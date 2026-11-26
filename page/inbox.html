@@ -43,7 +43,7 @@
   .t-ctls { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-4); min-width: 0; }
   .t-sort { position: relative; flex: none; display: inline-flex; }
   .t-sortbtn { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-height: var(--space-7); margin-left: calc(var(--space-3) * -1); padding: 0 var(--space-3); border: none; border-radius: var(--radius-small); background: none; color: var(--quiet); font-size: var(--size-small); line-height: var(--leading-small); text-align: start; }
-  .t-sortbtn:hover:not(:disabled), .t-sortbtn[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+  .t-sortbtn:hover:not(:disabled), .t-sortbtn[aria-expanded="true"] { color: var(--ink); }
   .t-sortbtn > svg { flex: none; width: 1rem; height: 1rem; }
   .t-says { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
   .t-says > svg { flex: none; width: 1rem; height: 1rem; }
@@ -62,7 +62,6 @@
   .t-meta { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
   .entry.t-card > .t-meta { margin-top: var(--space-1); }
   .t-level { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--space-7); height: var(--space-7); margin: 0 calc(var(--space-2) * -1); padding: 0; border: none; border-radius: var(--radius-small); background: none; color: var(--ink); }
-  .t-level:hover:not(:disabled) { background: var(--hover); }
   span.t-level { width: auto; height: auto; margin: 0; }
   .t-bars { display: block; width: 1rem; height: 1rem; }
   .t-bars > rect { fill: var(--line); }
@@ -81,7 +80,7 @@
   .t-head { display: flex; align-items: flex-start; gap: var(--space-4); }
   .t-head > .entry-title { flex: 1 1 auto; min-width: 0; margin: 0; font-weight: var(--weight-strong); overflow-wrap: anywhere; }
   .t-mark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--space-7); height: var(--space-7); margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 0; padding: 0; border: none; border-radius: var(--radius-round); background: none; color: var(--quiet); }
-  .t-mark:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+  .t-mark:hover:not(:disabled) { color: var(--ink); }
   .t-when { color: var(--quiet); font-size: var(--size-caption); line-height: var(--leading-small); }
   .t-words > p { margin: 0; overflow-wrap: anywhere; }
   .t-words > p + p { margin-top: var(--space-3); }
@@ -111,7 +110,6 @@
   .t-done > .t-said, .t-done > .t-yours { color: var(--quiet); }
   .t-done > .t-asked { color: var(--ink); }
   .t-week { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); width: auto; padding: var(--space-3) var(--space-2); border: none; border-radius: var(--radius); background: none; text-align: start; }
-  .t-week:hover:not(:disabled) { background: var(--hover); }
   .t-week > span:last-child { color: var(--quiet); }
   /* A card that waits is one size by its kind, whatever its words: the title in two lines at most, the words cut where the card
      ends with the clamp's own mark, as the title is cut, the acts at the end of the line under the title. A card
@@ -159,8 +157,8 @@
   .t-name { display: block; width: calc(100% + 2 * var(--space-2)); margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1); padding: var(--space-1) var(--space-2); border: none; border-radius: var(--radius); background: none; color: inherit; font: inherit; text-align: start; }
   /* Under the pointer every press the page draws takes the theme's ground for that job (`--float-hover`, main's theme.css: "the ground
      under the pointer app-wide on anything a person can press"), the title as its marks; 0.4.1 draws the marks, the level and the two
-     picks on --hover, which in the dark theme is another colour than the kit's own presses. */
-  .t-name:hover:not(:disabled), .t-mark:hover:not(:disabled), .t-level:hover:not(:disabled), .t-sortbtn:hover:not(:disabled), .t-sortbtn[aria-expanded="true"], .t-week:hover:not(:disabled) { background: var(--float-hover); }
+     picks on --hover, which in the dark theme is another colour than the kit's own presses. A row under 已处理 is one of them. */
+  .t-name:hover:not(:disabled), .t-mark:hover:not(:disabled), .t-level:hover:not(:disabled), .t-sortbtn:hover:not(:disabled), .t-sortbtn[aria-expanded="true"], .t-week:hover:not(:disabled), .t-open:hover:not(:disabled) { background: var(--float-hover); }
   .t-name > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
   /* The card's acts stand at its corner in one row, 复制 before the card's own ✓ or ×, as a file's tab ends its row with 复制 and
      下载; the line under the title keeps the level and the time, as signed. The level mark opens the page's own menu, as the two
