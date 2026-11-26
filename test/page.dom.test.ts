@@ -118,9 +118,11 @@ it("keeps the words and says the answer was not sent when the send is refused, a
   expect([again.querySelector<HTMLTextAreaElement>(".cx-box textarea")!.value, again.querySelector(".t-fail")!.textContent, board.write.mock.calls.length, held.get("b.md")!.text]).toEqual(["Twenty", "Your answer was not sent.", 0, ASK]);
 });
 
-it("marks a card that tells as read, and a dismissed one as dismissed with a line that takes it back", async () => {
+it("marks a card that tells as done at its tick, and a dismissed one as dismissed with a line that takes it back", async () => {
   const { held } = open({ "a.md": TELL, "b.md": ASK });
   await settle();
+  const tick = cardOf("a.md").querySelector<HTMLButtonElement>(".t-mark:not(.t-copy)")!;
+  expect([tick.getAttribute("aria-label"), tick.title]).toEqual(["Mark as done “Storage fees rose”", "Mark as done"]);
   cardOf("a.md").querySelector<HTMLButtonElement>(".t-mark:not(.t-copy)")!.click();
   await settle();
   expect(held.get("a.md")!.text).toMatch(/^---\ntitle: Storage fees rose\ndone: read\ndoneAt: .+\nwritten: .+\n---\nUp \$41\.20 on August\.\n$/);

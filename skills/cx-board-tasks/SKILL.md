@@ -1,6 +1,6 @@
 ---
 name: cx-board-tasks
-description: The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as read or answers. With this plugin the seller reads what you have for them in the Inbox; your answer to what they asked, a small one too, a finding, a change you made, a proposal or a question is a card there, and the chat shows the card by its title and where it stands, with no copy of its words.
+description: The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as done or answers. With this plugin the seller reads what you have for them in the Inbox; your answer to what they asked, a small one too, a finding, a change you made, a proposal or a question is a card there, and the chat shows the card by its title and where it stands, with no copy of its words.
 ---
 
 The Inbox is a tab of the board the `cx-board` skill describes: the directory `待办` under the board, which the seller sees named 收件箱 / Inbox.
@@ -26,7 +26,7 @@ It sells **6 a day** and 40 are left:
 ```
 
 - `title` is the one line the seller reads first. Without it, the card's first heading is its title.
-- `asks: true` makes the card one that asks: the seller answers it in a field on the card, in their own words. A card without it tells, and the seller ticks it 完成 / Done.
+- `asks: true` makes the card one that asks: the seller answers it in a field on the card, in their own words. A card without it tells, and the seller ticks it 完成 / Mark as done.
 - The seller may dismiss a card that asks, 忽略 / Dismiss.
 - `level` says how urgent the card is, as the `cx-board` skill says: the Inbox marks each card by it, a card without it is 常规 / Routine, and the seller may change it.
 - `questions` makes the card one that asks with options, in place of a field: one line of JSON in the form the platform's option card takes, `comchatx.options/1`, one question or several, or `comchatx.confirm/1` for a yes or a no. Under 已处理 / Done an answered card shows its title, its questions and the seller's answers; its words stay in the file but are not shown there.
@@ -49,7 +49,7 @@ Both can ship 500 by the end of the month.
 
 ## The page's names
 
-Call the Inbox's parts by the names the seller sees, in the seller's language: 收件箱 / Inbox, 已处理 / Done, 完成 / Done for the tick, 忽略 / Dismiss, 分组 / Grouping, 排序 / Ordering.
+Call the Inbox's parts by the names the seller sees, in the seller's language: 收件箱 / Inbox, 已处理 / Done, 完成 / Mark as done for the tick, 忽略 / Dismiss, 分组 / Grouping, 排序 / Ordering.
 
 ## Where a card stands
 

@@ -226,12 +226,12 @@
     reply: () => w("Answer cx", "回答 cx"), replyTo: (title) => named(w("Answer", "回答"), title),
     dismiss: () => w("Dismiss", "忽略"), dismissIt: (title) => named(w("Dismiss", "忽略"), title),
     // The ✓ takes a card to 已处理, and is not called read: read is a card opened.
-    tick: () => w("Done", "完成"), tickIt: (title) => named(w("Mark as done", "标为完成"), title),
+    tick: () => w("Mark as done", "完成"), tickIt: (title) => named(w("Mark as done", "标为完成"), title),
     undo: () => w("Undo", "撤销"), gone: (title) => named(w("Dismissed", "已忽略"), title),
     how: { answered: () => w("Answered", "已回答"), read: () => w("Done", "已完成"), dismissed: () => w("Dismissed", "已忽略") },
     at: (how, when) => w(`${how} · ${when}`, `${when} ${how}`),
     more: () => w("Show", "展开"), less: () => w("Show less", "收起"),
-    none: () => w("Nothing to do", "暂无待处理"), noneYet: () => w("What cx leaves for you will be here.", "cx 留给你的内容会放在这里。"),
+    none: () => w("Nothing to do", "暂无待处理"),
     noneDone: () => w("Nothing done yet", "暂无已处理"), notFound: () => w("No title has these words.", "标题里没有这些字。"),
     items: (n) => w(`${n}`, `${n} 条`), you: () => w("You", "你"),
     unsent: () => w("Your answer was not sent.", "回答没有发出去。"),
@@ -254,8 +254,8 @@
     // The chat's own words for the control of its row, `quote.copy` and `quote.copied` on main.
     copy: () => w("Copy", "复制"), copied: () => w("Copied", "已复制"),
     // The Inbox that has never held a card: what this place is for, and how to have cx put something in it.
-    voidTitle: () => w("Nothing needs your review yet", "还没有要你处理的事"),
-    voidLine: () => w("Ask cx to put what it finds and what needs your decision here.", "让 cx 把发现和要你决定的事放在这里。"),
+    noneYetTitle: () => w("Nothing needs your review yet", "还没有要你处理的事"),
+    noneYet: () => w("Ask cx to put what it finds and what needs your decision here.", "让 cx 把发现和要你决定的事放在这里。"),
     // A card not yet opened, and the two groups of the fourth way.
     unread: () => w("Unread", "未读"), unreadName: (title) => w(`${title}, unread`, `${title}，未读`), reads: { new: () => w("Unread", "未读"), seen: () => w("Read", "已读") },
   };
@@ -589,7 +589,7 @@
 
   /** The Inbox that has never held a card, as the board draws an empty board: the Inbox's mark in the board's pen, a title,
    *  one line on how to have cx put something here. Today's line goes; 暂无待处理, once every card is done, stays. */
-  const voidOf = () => h("div", { class: "t-void" }, icon(...GLYPH.tray), h("h2", { class: "t-void-title" }, W.voidTitle()), h("p", { class: "t-void-line" }, W.voidLine()));
+  const voidOf = () => h("div", { class: "t-void" }, icon(...GLYPH.tray), h("h2", { class: "t-void-title" }, W.noneYetTitle()), h("p", { class: "t-void-line" }, W.noneYet()));
 
   // ---- Drawing ----
   /**
@@ -874,7 +874,7 @@
       sync(part.lastChild, rows.map((one) => one.row));
       return part;
     };
-    if (list.length === 0 && S.gone.size === 0) out.push(keep("empty", [S.cards.size > 0, Kit.lang].join("|"), () => S.cards.size === 0 ? voidOf() : h("p", { class: "board-empty" }, S.cards.size > 0 ? W.none() : W.noneYet())));
+    if (list.length === 0 && S.gone.size === 0) out.push(keep("empty", [S.cards.size > 0, Kit.lang].join("|"), () => S.cards.size === 0 ? voidOf() : h("p", { class: "board-empty" }, W.none())));
     else {
       const all = keep("all", "", () => h("div", { class: "t-all" }));
       const parts = keep("parts", "", () => h("div", { class: "t-parts" }));

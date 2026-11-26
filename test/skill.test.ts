@@ -16,8 +16,8 @@ it("tells cx how an answer comes back: the seller's words, then the line naming 
 });
 
 it("gives the page's names as signed, and the skill's row as signed, its first sentence", () => {
-  expect(skill).toContain("收件箱 / Inbox, 已处理 / Done, 完成 / Done for the tick, 忽略 / Dismiss, 分组 / Grouping, 排序 / Ordering.");
-  expect(skill).toContain("description: The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as read or answers. ");
+  expect(skill).toContain("收件箱 / Inbox, 已处理 / Done, 完成 / Mark as done for the tick, 忽略 / Dismiss, 分组 / Grouping, 排序 / Ordering.");
+  expect(skill).toContain("description: The seller's Inbox on the board, where you leave what you found, changed, propose and ask, as cards the seller marks as done or answers. ");
 });
 
 it("says in the description, which cx holds at every turn, that what cx has for the seller is a card and the chat shows the card, not its words", () => {
