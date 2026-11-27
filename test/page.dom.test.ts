@@ -780,6 +780,52 @@ it("keeps the seller's picks, own words and place when the board refuses the sen
   expect(made.held.get("q.md")!.text).toContain("done: answered\n");
 });
 
+it("keeps the seller's picks, own words and place on a card's own tab when the board refuses the send", async () => {
+  const made = open({ "q.md": FORM(TWO) });
+  await settle();
+  made.tell("file", { path: "board/acct/inbox/q.md", name: "q.md", tab: "待办", file: "q.md", modified: made.held.get("q.md")!.modified, text: FORM(TWO) });
+  await settle();
+  const tab = () => document.querySelector<HTMLElement>(".t-page")!;
+  const press = (name: string): void => tab().querySelector<HTMLElement>(`[data-focus="${name}"]`)!.click();
+  press("o1");
+  press("next");
+  press("other");
+  const own = tab().querySelector<HTMLInputElement>('[data-focus="own"]')!;
+  own.value = "Keep these words";
+  own.dispatchEvent(new Event("input"));
+  made.refuse["send"] = ["busy"];
+  press("main");
+  await settle();
+  expect([tab().querySelector(".t-fail") !== null, tab().querySelector(".kit-asked .entry-title")!.textContent, tab().querySelector<HTMLInputElement>('[data-focus="own"]')!.value]).toEqual([true, "Question 2 of 2: How many?", "Keep these words"]);
+  press("previous");
+  expect(tab().querySelector<HTMLInputElement>('[data-focus="o1"]')!.checked).toBe(true);
+});
+
+it("keeps the newer copy the board handed in while a read was out over the read's older one", async () => {
+  const made = open({ "a.md": TELL });
+  await settle();
+  const at = made.held.get("a.md")!.modified, list = made.board.list.getMockImplementation()!;
+  const held = gate();
+  made.board.list.mockImplementationOnce(async () => { const rows = await list(); await held.promise; return rows; });
+  made.tell("files");
+  await settle();
+  made.tell("file", { path: "board/acct/inbox/a.md", name: "a.md", tab: "待办", file: "a.md", modified: at + 60_000, text: "---\ntitle: Storage fees rose again\n---\nUp $52.10 on September.\n" });
+  await settle();
+  held.release();
+  await settle();
+  expect(document.querySelector(".t-page h1")?.textContent).toBe("Storage fees rose again");
+});
+
+it("draws a done card the board hands in on a cold open, its entry in the done list and so not read by the page", async () => {
+  const DONE = "---\ntitle: Old\ndone: read\ndoneAt: 2026-10-20T08:00:00.000Z\n---\nGone.";
+  const first = open({ "d.md": DONE });
+  await settle();
+  const cold = open({ "d.md": DONE, "inbox-done.json": first.held.get("inbox-done.json")!.text });
+  cold.tell("file", { path: "board/acct/inbox/d.md", name: "d.md", tab: "待办", file: "d.md", modified: cold.held.get("d.md")!.modified, text: DONE });
+  await settle();
+  expect([document.querySelector(".t-page h1")?.textContent, document.querySelector(".t-page .t-page-words")?.textContent]).toEqual(["Old", "Gone."]);
+});
+
 it("draws nothing and counts nothing until its first read is whole, and keeps every card it holds and its count while it reads again", async () => {
   const files = { "a.md": TELL, "b.md": ASK, "c.md": "---\ntitle: Third\n---\nx\n" };
   document.documentElement.dataset["locale"] = "en";

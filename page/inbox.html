@@ -413,6 +413,8 @@
   let reading = false, again = false, first = true;
   /** Done cards known from the done list and not read: file → the time the board gives it. 已处理, or a card brought into view, reads them. */
   const unread = new Map();
+  /** The files the board handed in by `file`, for a card on a tab of its own. */
+  const handed = new Set();
   let doneWanted = false;
   const wantDone = () => { if (doneWanted) return; doneWanted = true; if (unread.size > 0) void load(); };
   const pause = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -462,6 +464,8 @@
     if (listed !== undefined) {
       // A card the seller pressed while the read was out keeps the press.
       for (const [file, c] of S.cards) if (S.busy.has(file) && read.has(file)) read.set(file, c);
+      // A file the board handed in while the read was out stands where the read's copy is not newer, or the read has none, as `file` judges.
+      for (const [file, c] of S.cards) { const got = read.get(file); if (got === undefined ? handed.has(file) : !(got.modified >= c.modified)) read.set(file, c); }
       for (const file of [...S.cards.keys()]) if (!read.has(file)) { S.fields.delete(file); S.asking.delete(file); }
       S.cards = read;
       S.ready = true;
@@ -527,7 +531,7 @@
     moved(c, "answered", words, answers);
     draw(); focusAfter(at);
     try { await board.send(words, { card: c.file }); }
-    catch { S.cards.set(c.file, c); S.busy.delete(c.file); S.failed.add(c.file); if (answers !== undefined && c.form !== undefined) S.asking.set(c.file, asking(c, answers)); draw(); (S.fields.get(c.file)?.querySelector("textarea") ?? document.getElementById(idOf(c.file)))?.focus(); return false; }
+    catch { S.cards.set(c.file, c); S.busy.delete(c.file); S.failed.add(c.file); if (answers !== undefined && c.form !== undefined) S.asking.set(c.file, asking(c, answers, S.view === "card" && S.alone === c.file)); draw(); (S.fields.get(c.file)?.querySelector("textarea") ?? document.getElementById(idOf(c.file)))?.focus(); return false; }
     S.failed.delete(c.file);
     S.fields.delete(c.file);
     S.asking.delete(c.file);
@@ -1030,7 +1034,7 @@
 
   // The board opens a card's file on a tab of its own with this page, as it opens a file with its viewer, and hands it the file: `file`
   // is its path in the Inbox's tab, the name the page's list gives it.
-  board.on("file", (given) => { const file = given.file; if (typeof file !== "string") return; if (typeof given.text === "string" && !(S.cards.get(file)?.modified >= given.modified)) S.cards.set(file, readCard(file, given.modified, given.text)); S.alone = file; S.view = "card"; draw(); });
+  board.on("file", (given) => { const file = given.file; if (typeof file !== "string") return; handed.add(file); if (typeof given.text === "string" && !(S.cards.get(file)?.modified >= given.modified)) S.cards.set(file, readCard(file, given.modified, given.text)); S.alone = file; S.view = "card"; draw(); });
   /** Whether a card's answer has outgrown the box's resting size, measured as it is typed and at each drawing. */
   function long(card) { const field = card.querySelector(".cx-box textarea"); if (!field) return; field.dataset.rest ??= field.value === "" ? String(field.offsetHeight) : ""; card.classList.toggle("t-long", field.dataset.rest !== "" && field.offsetHeight > Number(field.dataset.rest) + 1); }
   page.addEventListener("input", (event) => { const card = event.target.closest?.(".entry.t-card"); if (card) long(card); });
