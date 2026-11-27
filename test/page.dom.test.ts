@@ -195,6 +195,15 @@ it("says what cx will leave here in the middle of the page before anything came,
   }
 });
 
+it("says 暂无待处理, not the welcome, where every card the Inbox holds is done and not read yet", async () => {
+  const DONE = "---\ntitle: Old\ndone: read\ndoneAt: 2026-10-20T08:00:00.000Z\n---\nGone.";
+  const first = open({ "d.md": DONE }, "zh");
+  await settle();
+  open({ "d.md": DONE, "inbox-done.json": first.held.get("inbox-done.json")!.text }, "zh");
+  await settle();
+  expect([document.querySelector(".board-empty")?.textContent, document.querySelector(".t-void")]).toEqual(["暂无待处理", null]);
+});
+
 it("keeps what cx wrote to a card while its answer was on its way, and what it wrote to a dismissed card before it was taken back", async () => {
   const made = open({ "b.md": ASK });
   await settle();
@@ -1072,6 +1081,29 @@ it("keeps each question's words in the title press of a card that asks with seve
   expect([title().querySelector(".t-name")?.textContent, title().querySelectorAll(".t-name").length]).toEqual(["Question 2 of 2: How many?", 1]);
   title().querySelector<HTMLButtonElement>(".t-name")!.click();
   expect(made.asked.filter(([verb]) => verb === "open")).toEqual([["open", "q.md"]]);
+});
+
+it("draws a card that asks with options or a confirmation whole on a tab of its own: its title and its words, and its question under them", async () => {
+  for (const [file, text, question] of [["q.md", FORM(ONE), "Which supplier?"], ["c.md", CONFIRM("Order 400 more?"), "Order 400 more?"]] as const) {
+    const made = open({ [file]: text }, "en", { markdown: async (words: string) => `<p>${words.trim()}</p>` });
+    await settle();
+    made.tell("file", { path: `board/acct/inbox/${file}`, name: file, tab: "待办", file, modified: made.held.get(file)!.modified, text });
+    await settle();
+    const page = document.querySelector<HTMLElement>(".t-page")!;
+    expect([page.querySelector("h1")?.textContent, page.querySelector(".t-page-words")?.textContent, page.querySelector(".kit-asked .entry-title")?.textContent, page.querySelector(".kit-asked") !== null])
+      .toEqual([file === "q.md" ? "Pick a supplier" : "Order 400 more?", file === "q.md" ? "Who ships it?" : "The kettle sells 6 a day.", question, true]);
+  }
+});
+
+it("draws the newer file the board hands it for a card it already holds", async () => {
+  const made = open({ "a.md": TELL });
+  await settle();
+  const at = made.held.get("a.md")!.modified;
+  made.tell("file", { path: "board/acct/inbox/a.md", name: "a.md", tab: "待办", file: "a.md", modified: at, text: TELL });
+  await settle();
+  made.tell("file", { path: "board/acct/inbox/a.md", name: "a.md", tab: "待办", file: "a.md", modified: at + 60_000, text: "---\ntitle: Storage fees rose again\n---\nUp $52.10 on September.\n" });
+  await settle();
+  expect(document.querySelector(".t-page h1")?.textContent).toBe("Storage fees rose again");
 });
 
 it("draws the whole card the board hands it on a tab of its own, titled by the card's head, its words under the board's rules for a read whole, and answers it there", async () => {

@@ -773,7 +773,7 @@
    * own words put back through its own controls, on the last question, where they pressed.
    */
   let askings = 0;
-  function asking(c, sent) {
+  function asking(c, sent, alone = false) {
     const under = meta(c);
     const element = Kit.questions({ form: c.form, words: W.asked(), under, answer: (value) => {
       const now = S.cards.get(c.file) ?? c;
@@ -794,15 +794,18 @@
       const name = title.querySelector(":scope > .t-name");
       title.replaceChildren(nameOf(S.cards.get(c.file) ?? c, name === null ? [...title.childNodes] : [...name.firstChild.childNodes]));
     };
-    titled();
-    new MutationObserver((changes) => { if (changes.some((one) => one.target === element)) titled(); }).observe(element, { childList: true });
-    return { form: JSON.stringify(c.form), lang: Kit.lang, modified: c.modified, under, element, titled, n: ++askings };
+    // On the card's own tab the card's title is the page's heading, so the question keeps the kit's own words.
+    if (!alone) {
+      titled();
+      new MutationObserver((changes) => { if (changes.some((one) => one.target === element)) titled(); }).observe(element, { childList: true });
+    }
+    return { form: JSON.stringify(c.form), lang: Kit.lang, modified: c.modified, under, element, titled: alone ? () => {} : titled, alone, n: ++askings };
   }
   function askingCard(c) {
     const busy = S.busy.has(c.file), id = idOf(c.file), failed = S.failed.has(c.file);
     let asked = S.asking.get(c.file);
     // One element for as long as the card's questions are the same in one language: a rewrite of its words alone keeps it, and its time.
-    if (asked === undefined || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c));
+    if (asked === undefined || asked.alone || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c));
     else { asked.under.replaceChildren(...meta(c).childNodes); asked.modified = c.modified; }
     asked.titled();
     return h("li", {}, h("article", { class: `entry t-card t-asks t-form${seen(c) ? "" : " t-new"}`, id, tabindex: "-1", "data-file": c.file },
@@ -886,7 +889,9 @@
       sync(part.lastChild, rows.map((one) => one.row));
       return part;
     };
-    if (list.length === 0 && S.gone.size === 0) out.push(keep("empty", [S.cards.size > 0, Kit.lang].join("|"), () => S.cards.size === 0 ? voidOf() : h("p", { class: "board-empty" }, W.none())));
+    // The welcome is for an Inbox that never had a card: done cards not read yet are cards it had.
+    const had = S.cards.size > 0 || unread.size > 0;
+    if (list.length === 0 && S.gone.size === 0) out.push(keep("empty", [had, Kit.lang].join("|"), () => had ? h("p", { class: "board-empty" }, W.none()) : voidOf()));
     else {
       const all = keep("all", "", () => h("div", { class: "t-all" }));
       const parts = keep("parts", "", () => h("div", { class: "t-parts" }));
@@ -961,7 +966,7 @@
   function cardView() {
     const c = S.cards.get(S.alone);
     if (c === undefined) return [];
-    if (c.form === undefined) askWords(c);
+    askWords(c);
     // The card is open on its tab, so its dot goes, wherever the tab was opened from.
     if (!seen(c)) setTimeout(() => see(c), 0);
     return [keep(`alone:${c.file}`, [c.modified, c.level, c.done, Kit.lang, S.busy.has(c.file), S.failed.has(c.file), S.levels === c.file, drawnOf(c), S.asking.get(c.file)?.n].join("|"), () => aloneOf(c))];
@@ -971,10 +976,15 @@
     const fail = failed && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent());
     if (open && c.form !== undefined) {
       let asked = S.asking.get(c.file);
-      if (asked === undefined || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c));
+      if (asked === undefined || !asked.alone || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c, undefined, true));
       else asked.under.replaceChildren(...meta(c).childNodes);
-      return h("article", { class: "t-page t-asks t-form t-card", id, tabindex: "-1", "data-file": c.file, "aria-label": c.title }, asked.element, fail,
-        markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy));
+      // The whole card: its title and its words, and its question under them.
+      return h("article", { class: "t-page t-asks t-form t-card", id, tabindex: "-1", "data-file": c.file, "aria-labelledby": `${id}-title` },
+        h("div", { class: "t-page-head" },
+          h("h1", { class: "t-page-title", id: `${id}-title`, dir: "auto" }, c.title),
+          markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy)),
+        wordsOf(c, { class: "t-page-words", dir: "auto" }, true),
+        asked.element, fail);
     }
     const box = open && c.asks && fieldOf(c.file), field = box && box.querySelector("textarea");
     if (field) { field.disabled = busy; field.placeholder = W.reply(); field.setAttribute("aria-label", W.replyTo(c.title)); }
@@ -1020,7 +1030,7 @@
 
   // The board opens a card's file on a tab of its own with this page, as it opens a file with its viewer, and hands it the file: `file`
   // is its path in the Inbox's tab, the name the page's list gives it.
-  board.on("file", (given) => { const file = given.file; if (typeof file !== "string") return; if (typeof given.text === "string" && !S.cards.has(file)) S.cards.set(file, readCard(file, given.modified, given.text)); S.alone = file; S.view = "card"; draw(); });
+  board.on("file", (given) => { const file = given.file; if (typeof file !== "string") return; if (typeof given.text === "string" && !(S.cards.get(file)?.modified >= given.modified)) S.cards.set(file, readCard(file, given.modified, given.text)); S.alone = file; S.view = "card"; draw(); });
   /** Whether a card's answer has outgrown the box's resting size, measured as it is typed and at each drawing. */
   function long(card) { const field = card.querySelector(".cx-box textarea"); if (!field) return; field.dataset.rest ??= field.value === "" ? String(field.offsetHeight) : ""; card.classList.toggle("t-long", field.dataset.rest !== "" && field.offsetHeight > Number(field.dataset.rest) + 1); }
   page.addEventListener("input", (event) => { const card = event.target.closest?.(".entry.t-card"); if (card) long(card); });
