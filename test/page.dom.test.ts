@@ -990,6 +990,15 @@ it("quotes a card whole at its corner, 引用 before 复制, where a chat takes 
   expect(cardOf("a.md").querySelector(".t-quote")).toBeNull();
 });
 
+it("quotes a long card whole, its title and words as they stand: the board holds a quote to what a card holds", async () => {
+  const quote = vi.fn(async (_given: unknown) => "quoted");
+  const title = "Storage fees ".repeat(8).trim(), body = "Up on August. ".repeat(220).trim();
+  open({ "long.md": `---\ntitle: ${title}\n---\n${body}\n` }, "zh", { quote, context: { theme: "light", locale: "zh", width: 400, quote: true } });
+  await settle();
+  cardOf("long.md").querySelector<HTMLButtonElement>(".t-quote")!.click();
+  expect(quote.mock.calls).toEqual([[{ text: `${title}\n\n${body}`, card: "long.md", title, whole: true }]]);
+});
+
 it("opens a card's urgency menu at its mark or by ↓, writes the one picked into the card's head with the card's own time, and moves the card", async () => {
   const made = open({ "a.md": TELL, "b.md": "---\ntitle: Second\n---\ny\n" });
   await settle();

@@ -581,8 +581,6 @@
   }
   /** 复制 puts the card's title and words on the clipboard and says 已复制 for a moment, to the eye and to a screen reader, as the chat's row does. */
   const COPIED_MS = 1500;
-  // What the board takes in a quote: a title of at most 80 characters, words of at most 2,000.
-  const TITLE_MAX = 80, SAID_MAX = 2000;
   async function copy(c) {
     const text = `${c.title}\n\n${c.body.trim()}`;
     try { await navigator.clipboard.writeText(text); } catch { return; } // a board that does not let the page write the clipboard: no tick, nothing said
@@ -719,9 +717,9 @@
   const quotes = () => board.context?.quote === true;
   function quoteMark(c) {
     if (!quotes()) return undefined;
-    const title = c.title.slice(0, TITLE_MAX), text = `${c.title}\n\n${c.body.trim()}`.slice(0, SAID_MAX);
+    const text = `${c.title}\n\n${c.body.trim()}`;
     return h("button", { type: "button", class: "t-mark t-quote", title: W.quote(), "aria-label": named(W.quote(), c.title),
-      onclick: () => void board.quote({ text, card: c.file, title, whole: true }).catch(() => {}) }, icon(...GLYPH.quote));
+      onclick: () => void board.quote({ text, card: c.file, title: c.title, whole: true }).catch(() => {}) }, icon(...GLYPH.quote));
   }
   /** The acts at a card's corner: 引用 and 复制, then the card's own ✓ where it tells (a card that asks has its × at the corner after its box). */
   const acts = (c) => h("span", { class: "t-acts" }, quoteMark(c), copyMark(c), !c.asks && markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), S.busy.has(c.file)));
