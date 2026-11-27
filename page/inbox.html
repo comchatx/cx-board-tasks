@@ -8,7 +8,9 @@
   `spikes/inbox-wide`, sheet 8, signed 2026-11-18) on the board's own asks (`window.cxBoard`) and elements (`Kit`). A card is a
   Markdown file anywhere in the tab: `title` (or its first heading), cx's words, `asks: true` where it asks, `level` for how urgent it
   is, and `questions` where it asks with options. Where it stands is written into its own front matter (`done`, `doneAt`, `answer`,
-  `answers`), as the base reads any board's card. How the seller groups and orders the cards is kept in `inbox.json` beside them.
+  `answers`, the `level` the seller picks, and `written`, the card's own time, once the page writes the file), as the base reads any
+  board's card. How the seller groups and orders the cards is kept in `inbox.json` beside them, and the cards the seller has opened in
+  `inbox-opened.json`. The board opens a card on a tab of its own with this page, and hands it the card's file.
 -->
 <style>
   body.kit { container-type: inline-size; }
@@ -41,7 +43,7 @@
   .t-ctls { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: var(--space-4); min-width: 0; }
   .t-sort { position: relative; flex: none; display: inline-flex; }
   .t-sortbtn { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-height: var(--space-7); margin-left: calc(var(--space-3) * -1); padding: 0 var(--space-3); border: none; border-radius: var(--radius-small); background: none; color: var(--quiet); font-size: var(--size-small); line-height: var(--leading-small); text-align: start; }
-  .t-sortbtn:hover:not(:disabled), .t-sortbtn[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+  .t-sortbtn:hover:not(:disabled), .t-sortbtn[aria-expanded="true"] { color: var(--ink); }
   .t-sortbtn > svg { flex: none; width: 1rem; height: 1rem; }
   .t-says { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
   .t-says > svg { flex: none; width: 1rem; height: 1rem; }
@@ -60,7 +62,6 @@
   .t-meta { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
   .entry.t-card > .t-meta { margin-top: var(--space-1); }
   .t-level { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--space-7); height: var(--space-7); margin: 0 calc(var(--space-2) * -1); padding: 0; border: none; border-radius: var(--radius-small); background: none; color: var(--ink); }
-  .t-level:hover:not(:disabled) { background: var(--hover); }
   span.t-level { width: auto; height: auto; margin: 0; }
   .t-bars { display: block; width: 1rem; height: 1rem; }
   .t-bars > rect { fill: var(--line); }
@@ -78,15 +79,11 @@
   .t-quiet[hidden] { display: none; }
   .t-head { display: flex; align-items: flex-start; gap: var(--space-4); }
   .t-head > .entry-title { flex: 1 1 auto; min-width: 0; margin: 0; font-weight: var(--weight-strong); overflow-wrap: anywhere; }
-  .t-head > .entry-title.cut { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
   .t-mark { flex: none; display: inline-flex; align-items: center; justify-content: center; width: var(--space-7); height: var(--space-7); margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 0; padding: 0; border: none; border-radius: var(--radius-round); background: none; color: var(--quiet); }
-  .t-mark:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
+  .t-mark:hover:not(:disabled) { color: var(--ink); }
   .t-when { color: var(--quiet); font-size: var(--size-caption); line-height: var(--leading-small); }
   .t-words > p { margin: 0; overflow-wrap: anywhere; }
   .t-words > p + p { margin-top: var(--space-3); }
-  .t-words.cut { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
-  .t-words.cut > p { display: inline; }
-  .t-words.cut > p + p::before { content: " "; }
   .t-words.markdown, .t-past-words.markdown { margin-bottom: 0; }
   .t-past-words > p { margin: 0; overflow-wrap: anywhere; }
   .t-past-words > p + p { margin-top: var(--space-3); }
@@ -113,8 +110,99 @@
   .t-done > .t-said, .t-done > .t-yours { color: var(--quiet); }
   .t-done > .t-asked { color: var(--ink); }
   .t-week { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); width: auto; padding: var(--space-3) var(--space-2); border: none; border-radius: var(--radius); background: none; text-align: start; }
-  .t-week:hover:not(:disabled) { background: var(--hover); }
   .t-week > span:last-child { color: var(--quiet); }
+  /* A card that waits is one size by its kind, whatever its words: the title in two lines at most, the words cut where the card
+     ends with the clamp's own mark, as the title is cut, the acts at the end of the line under the title. A card
+     that asks is taller by the chat's box. The title is set as a heading in an answer is and the words as the conversation is, so a
+     card reads as cx's answer does in the chat; the spaces are the theme's, a step looser than the kit's card. */
+  .entry.t-card { --t-line: calc(var(--size-body) * var(--leading-body)); --t-title: calc(var(--size-lead) * var(--leading-tight));
+    --t-box: calc(2.8rem + 2 * var(--space-3) + 2px + var(--size-small) * var(--leading-small) + 2 * var(--space-2) + 2px);
+    --t-rest: calc(2 * var(--space-6) + 2px + 2 * var(--t-title) + var(--space-2) + var(--space-7) + var(--space-5));
+    display: flex; flex-direction: column; height: calc(var(--t-rest) + 3 * var(--t-line)); padding: var(--space-6); }
+  .entry.t-card.t-asks { height: calc(var(--t-rest) + 2 * var(--t-line) + var(--space-5) + var(--t-box)); }
+  .entry.t-card > * { flex: none; }
+  .entry.t-card > * + *:not([hidden]) { margin-top: var(--space-5); }
+  .entry.t-card > .t-meta { margin-top: var(--space-2); }
+  .entry.t-card > .t-mark, .entry.t-card > .t-tip { margin: 0; } /* drawn over the card, out of its flow */
+  .entry.t-card > .t-words { flex: 0 1 auto; min-height: 0; margin-bottom: auto; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
+  .entry.t-card.t-asks > .t-words { -webkit-line-clamp: 2; line-clamp: 2; } /* whole lines: what the card has over goes under the words */
+  /* The preview is the words as one run of text: each block of the Markdown in line after the one before, a heading in the strong
+     weight as a run-in head, a table left to the card's tab. */
+  .entry.t-card > .t-words :is(p, h1, h2, h3, h4, h5, h6, ul, ol, li, blockquote) { display: inline; margin: 0; padding: 0; border: none; color: inherit; font-size: inherit; line-height: inherit; }
+  .entry.t-card > .t-words > :is(h1, h2, h3, h4, h5, h6) { font-weight: var(--weight-strong); }
+  .entry.t-card > .t-words > * + *::before, .entry.t-card > .t-words li + li::before { content: " "; }
+  .entry.t-card > .t-words :is(table, pre, hr, img), .entry.t-card > .t-words > :is(h1, h2, h3, h4, h5, h6):has(+ :is(table, pre, hr)) { display: none; }
+  .t-words.entry-body, .t-page-words:not(.markdown-body) { font-size: var(--size-body); line-height: var(--leading-body); }
+  .t-words.entry-body p { margin: var(--space-4) 0; }
+  .t-words.entry-body > :first-child { margin-top: 0; }
+  .t-words.entry-body > :last-child { margin-bottom: 0; }
+  /* An answer that outgrows the box's resting size grows it by one line, then scrolls in it; the words give that line up and keep the
+     clamp's mark. A line that says the answer was not sent stands close under the box, as a field's error does, and takes the same. */
+  .entry.t-card .cx-box textarea { max-height: calc(2.8rem + var(--t-line)); }
+  .entry.t-card.t-asks.t-long > .t-words, .entry.t-card.t-asks:has(> .t-fail) > .t-words { -webkit-line-clamp: 1; line-clamp: 1; }
+  .entry.t-card > .t-fail:not([hidden]) { margin-top: var(--space-2); }
+  /* A card that asks with options is as tall as every card that asks: its title a press as every title is, its options scrolling in
+     their own frame, its foot with 提交 at the card's foot; each option keeps its line, where the cost of a choice is said. The whole
+     form is on the card's tab. */
+  .entry.t-card.t-form > .kit-asked { flex: 1 1 0; min-height: 0; }
+  .entry.t-card.t-form > .kit-asked > .entry-title { font-size: var(--size-lead); line-height: var(--leading-tight); }
+  .entry.t-card.t-form > .kit-asked > .kit-options { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .entry.t-card.t-form > .kit-asked > .kit-asked-message, .t-page.t-form > .kit-asked > .kit-asked-message { font-size: var(--size-body); line-height: var(--leading-body); }
+  .entry.t-card.t-form > .kit-asked > .kit-asked-message { flex: none; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  .entry.t-card.t-form > .kit-asked > .kit-asked-foot { flex: none; margin-top: auto; }
+  .t-head > .entry-title { font-size: var(--size-lead); line-height: var(--leading-tight); }
+  .t-card.t-asks > .t-mark { top: calc(var(--space-6) - var(--space-1)); right: calc(var(--space-6) - var(--space-2)); }
+  /* The title is the press that opens the card on a tab of its own, as a file's name in the chat opens the file's: under the pointer a
+     shade behind it, as behind every press of the page, and no underline. */
+  .t-name { display: block; width: calc(100% + 2 * var(--space-2)); margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1); padding: var(--space-1) var(--space-2); border: none; border-radius: var(--radius); background: none; color: inherit; font: inherit; text-align: start; }
+  /* Under the pointer every press the page draws takes the theme's ground for that job (`--float-hover`, main's theme.css: "the ground
+     under the pointer app-wide on anything a person can press"), the title as its marks; 0.4.1 draws the marks, the level and the two
+     picks on --hover, which in the dark theme is another colour than the kit's own presses. A row under 已处理 is one of them. */
+  .t-name:hover:not(:disabled), .t-mark:hover:not(:disabled), .t-level:hover:not(:disabled), .t-sortbtn:hover:not(:disabled), .t-sortbtn[aria-expanded="true"], .t-week:hover:not(:disabled), .t-open:hover:not(:disabled) { background: var(--float-hover); }
+  .t-name > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+  /* The card's acts stand at its corner in one row, 复制 before the card's own ✓ or ×, as a file's tab ends its row with 复制 and
+     下载; the line under the title keeps the level and the time, as signed. The level mark opens the page's own menu, as the two
+     presses at its head open theirs. */
+  .t-head > .t-acts { flex: none; display: inline-flex; align-items: center; gap: var(--space-2); margin: calc(var(--space-1) * -1) calc(var(--space-2) * -1) 0 0; }
+  .t-head > .t-acts > .t-mark { margin: 0; }
+  .t-card.t-form > .t-quote { position: absolute; top: calc(var(--space-6) - var(--space-1)); right: calc(var(--space-6) - var(--space-2) + 2 * (var(--space-7) + var(--space-2))); margin: 0; }
+  .t-card.t-form > .t-copy { position: absolute; top: calc(var(--space-6) - var(--space-1)); right: calc(var(--space-6) - var(--space-2) + var(--space-7) + var(--space-2)); margin: 0; }
+  .t-form > .kit-asked > .entry-title { padding-right: calc(3 * var(--space-7) + 2 * var(--space-2) - var(--space-2) + var(--space-4)); }
+  .t-meta { position: relative; }
+  .t-levels { min-width: 9rem; }
+  /* A card not yet opened carries the board's own dot, the one a tab carries while it holds something not seen, in the
+     card's margin beside its title's first line, so titles keep one edge; opening the whole card takes it away. */
+  .entry.t-card.t-new::before { content: ""; position: absolute; left: calc((var(--space-6) - var(--space-3)) / 2 - 1px); top: calc(var(--space-6) + var(--t-title) / 2 - var(--space-3) / 2); width: var(--space-3); height: var(--space-3); border-radius: var(--radius-round); background: var(--ink); }
+  .t-levels button > .t-bars { flex: none; }
+  /* A card on a tab of its own: the whole card, its words as cx's answer is drawn, its acts where the card has them. */
+  .t-page { max-width: 44rem; }
+  .t-page:focus { outline: none; }
+  .t-page-head { display: flex; align-items: flex-start; gap: var(--space-4); }
+  /* The whole card's title is the theme's for a page's title (26px), over GitHub's headings in its words (24px and less below the
+     first level). */
+  .t-page { --t-page-title: var(--size-display); }
+  .t-page-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: var(--t-page-title); font-weight: var(--weight-strong); line-height: var(--leading-tight); overflow-wrap: anywhere; }
+  .t-page-head > .t-mark { margin: 0 calc(var(--space-2) * -1) 0 0; }
+  .t-page.t-form > .t-mark { top: calc((var(--t-page-title) * var(--leading-tight) - var(--space-7)) / 2); right: calc(var(--space-2) * -1); }
+  .t-page > .t-meta { margin-top: var(--space-3); }
+  .t-page > .t-page-words { margin: var(--space-6) 0 0; }
+  .t-page > .t-yours { margin: var(--space-6) 0 0; color: var(--quiet); font-size: var(--size-body); line-height: var(--leading-body); overflow-wrap: anywhere; }
+  .t-page > .cx-box { margin-top: var(--space-7); }
+  .t-page > .t-fail { margin-top: var(--space-2); }
+  .t-page > .t-gone { margin-top: var(--space-6); padding: 0; }
+  .t-page.t-form > .kit-asked > .entry-title { font-size: var(--t-page-title); }
+  /* The level in colour on its lit bars only, 加急 the theme's warning yellow (`--warn`) and 特急 the theme's red; the track, the ground and every word stay as they
+     were. One mark, one look, wherever it stands: the card, its menu, the whole card, 已处理. */
+  .t-bars.t-l2 > rect.lit { fill: var(--warn); }
+  .t-bars.t-l3 > rect.lit { fill: var(--bad); }
+  /* The Inbox that has never held a card, as the board draws an empty board: the mark, the title and the line in the middle
+     of the place under the page's head, in the values the board hands every page. */
+  .kit-page:has(> .t-void) { min-height: calc(100vh - var(--space-5) - var(--space-7)); }
+  .t-void { flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: 0 var(--space-6) var(--space-8); text-align: center; }
+  .t-void > svg { width: var(--space-8); height: var(--space-8); margin-bottom: var(--space-2); color: var(--quiet); }
+  .t-void-title { margin: 0; color: var(--ink); font-size: var(--size-lead); font-weight: var(--weight-strong); line-height: var(--leading-tight); }
+  .t-void-line { margin: 0; max-width: 26rem; color: var(--quiet); font-size: var(--size-small); line-height: var(--leading-small); }
+  .t-void-title, .t-void-line { text-wrap: balance; } /* a centred line that wraps does so in lines of one length, as main's headings do */
 </style>
 </head>
 <body class="kit">
@@ -130,7 +218,7 @@
   const named = (verb, title) => w(`${verb} “${title}”`, `${verb}“${title}”`);
   const GLYPH = {
     out: ["M6.5 6.5l11 11", "M17.5 6.5l-11 11"], tick: ["M5 12.5l4.5 4.5L19 7.5"], past: ["M12 4a8 8 0 1 0 0 16a8 8 0 0 0 0-16z", "M12 8v4.5l3 1.5"],
-    back: ["M14.5 6l-6 6l6 6"], sort: ["M5 7h14", "M7.5 12h9", "M10 17h4"], cols: ["M4.5 5.5h4v13h-4z", "M10 5.5h4v13h-4z", "M15.5 5.5h4v13h-4z"], down: ["M7 10l5 5l5-5"],
+    back: ["M14.5 6l-6 6l6 6"], copy: ["M9 9h10v11H9z", "M5 15V4h10"], quote: ["M10 6.5C7 7.5 5 9.8 5 13v4.5h5V13H7.2", "M19 6.5c-3 1-5 3.3-5 6.5v4.5h5V13h-2.8"], download: ["M12 4v11", "M7.5 10.5L12 15l4.5-4.5", "M5 19.5h14"], tray: ["M5.5 4.5h13a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2z", "M3.5 13h5l1.5 2.5h4l1.5-2.5h5"], sort: ["M5 7h14", "M7.5 12h9", "M10 17h4"], cols: ["M4.5 5.5h4v13h-4z", "M10 5.5h4v13h-4z", "M15.5 5.5h4v13h-4z"], down: ["M7 10l5 5l5-5"],
   };
   // The signed words: comchatx `spikes/board/README.md` rows 2 to 17 and 25 to 44 (2026-11-11); the option card's lines by their keys
   // on main; the two presses, the ways, the levels and the groups of time (copy 678 c1, 681 §4 and c3, signed 2026-11-18).
@@ -138,16 +226,17 @@
     history: () => w("Done", "已处理"), back: () => w("Back", "返回"), search: () => w("Search", "搜索"),
     reply: () => w("Answer cx", "回答 cx"), replyTo: (title) => named(w("Answer", "回答"), title),
     dismiss: () => w("Dismiss", "忽略"), dismissIt: (title) => named(w("Dismiss", "忽略"), title),
-    tick: () => w("Mark as read", "已读"), tickIt: (title) => named(w("Mark as read", "标为已读"), title),
+    // The ✓ takes a card to 已处理, and is not called read: read is a card opened.
+    tick: () => w("Mark as done", "完成"), tickIt: (title) => named(w("Mark as done", "标为完成"), title),
     undo: () => w("Undo", "撤销"), gone: (title) => named(w("Dismissed", "已忽略"), title),
-    how: { answered: () => w("Answered", "已回答"), read: () => w("Read", "已读"), dismissed: () => w("Dismissed", "已忽略") },
+    how: { answered: () => w("Answered", "已回答"), read: () => w("Done", "已完成"), dismissed: () => w("Dismissed", "已忽略") },
     at: (how, when) => w(`${how} · ${when}`, `${when} ${how}`),
     more: () => w("Show", "展开"), less: () => w("Show less", "收起"),
-    none: () => w("Nothing to do", "暂无待处理"), noneYet: () => w("What cx leaves for you will be here.", "cx 留给你的内容会放在这里。"),
+    none: () => w("Nothing to do", "暂无待处理"),
     noneDone: () => w("Nothing done yet", "暂无已处理"), notFound: () => w("No title has these words.", "标题里没有这些字。"),
     items: (n) => w(`${n}`, `${n} 条`), you: () => w("You", "你"),
     unsent: () => w("Your answer was not sent.", "回答没有发出去。"),
-    said: { read: () => w("Marked as read", "已标为已读"), dismissed: () => w("Dismissed", "已忽略"), answered: () => w("Sent to cx", "已交给 cx"), back: () => w("Back on the list", "已恢复") },
+    said: { read: () => w("Marked as done", "已标为完成"), dismissed: () => w("Dismissed", "已忽略"), answered: () => w("Sent to cx", "已交给 cx"), back: () => w("Back on the list", "已恢复") },
     count: (asks, tells) => [asks > 0 && w(`${asks} to answer`, `${asks} 条待作答`), tells > 0 && w(`${tells} to read`, `${tells} 条待查看`)].filter(Boolean).join(w(", ", "，")),
     // ask.other, ask.otherNamed, ask.submit, ask.next, ask.previous, ask.position, ask.positionSaid, dialog.skip, dialog.yes, dialog.no, dialog.unanswered
     asked: () => ({
@@ -158,11 +247,20 @@
     }),
     unanswered: () => w("Not answered", "未作答"),
     split: () => w("Grouping", "分组"), inside: () => w("Ordering", "排序"),
-    way: (pick, way) => (way === "kind" ? w("Type", "类型") : way === "level" ? w("Urgency", "紧急程度") : pick === "by" ? w("Date", "时间") : w("Newest", "最新")),
+    way: (pick, way) => (way === "kind" ? w("Type", "类型") : way === "level" ? w("Urgency", "紧急程度") : way === "read" ? w("Unread", "未读") : pick === "by" ? w("Date", "时间") : w("Newest", "最新")),
     levelWords: [() => w("Routine", "常规"), () => w("Urgent", "加急"), () => w("Very urgent", "特急")],
     levelSaid: [() => w("Urgency: routine", "紧急程度：常规"), () => w("Urgency: urgent", "紧急程度：加急"), () => w("Urgency: very urgent", "紧急程度：特急")],
     groups: { today: () => w("Today", "今天"), three: () => w("Last 3 days", "最近 3 天"), older: () => w("Older", "更早") },
     kinds: { asks: () => w("Questions", "提问"), tells: () => w("Updates", "汇报") },
+    // The chat's own words for the control of its row, `quote.copy` and `quote.copied` on main.
+    copy: () => w("Copy", "复制"), copied: () => w("Copied", "已复制"),
+    // The chat's `quote.quote`, and `quote.card` by `named`.
+    quote: () => w("Quote", "引用"),
+    // The Inbox that has never held a card: what this place is for, and how to have cx put something in it.
+    noneYetTitle: () => w("Nothing needs your review yet", "还没有要你处理的事"),
+    noneYet: () => w("Ask cx to put what it finds and what needs your decision here.", "让 cx 把发现和要你决定的事放在这里。"),
+    // A card not yet opened, and the two groups of the fourth way.
+    unread: () => w("Unread", "未读"), unreadName: (title) => w(`${title}, unread`, `${title}，未读`), reads: { new: () => w("Unread", "未读"), seen: () => w("Read", "已读") },
   };
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const two = (n) => String(n).padStart(2, "0");
@@ -212,14 +310,23 @@
     const words = rest.split(/\r?\n[ \t]*\r?\n/).map((one) => one.replace(/\s+/g, " ").trim()).filter((one) => one !== "");
     const done = DONE.has(keys.get("done")) ? keys.get("done") : undefined;
     const at = Date.parse(keys.get("doneAt") ?? "");
+    const written = Date.parse(keys.get("written") ?? "");
     const form = formOf(keys.get("questions"));
     const answers = json(keys.get("answers") ?? "");
     return {
-      file, modified, text, title, words, body: rest, form, answers: answersOf(answers, form),
+      file, modified, at: Number.isFinite(written) ? written : modified, text, title, words, body: rest, form, answers: answersOf(answers, form),
       asks: form !== undefined || keys.get("asks") === "true" || ASKING.has(keys.get("kind")),
       level: ["1", "2", "3"].includes(keys.get("level")) ? Number(keys.get("level")) : 1,
       done, doneAt: Number.isFinite(at) ? at : modified, answer: keys.get("answer"),
     };
+  }
+  /**
+   * The file as the page writes it, with the card's own time in its head: the time cx wrote it, which the file's own time stops being
+   * once the page writes the file. A head that holds it keeps it.
+   */
+  function stamped(text, at) {
+    const { lines, keys, body } = front(text);
+    return keys.has("written") ? text : `---\n${[...(lines ?? []), `written: ${new Date(at).toISOString()}`].join("\n")}\n---\n${body}`;
   }
   /** The file with its marks set, every other line and byte as it was; `undefined` takes them out. */
   function marked(text, mark) {
@@ -230,9 +337,17 @@
     return all.length === 0 ? body : `---\n${all.join("\n")}\n---\n${body}`;
   }
 
+  /** The file with its `level` set by the seller's hand, every other line and byte as it was. */
+  function leveled(text, level) {
+    const { lines, body } = front(text);
+    const kept = (lines ?? []).filter((line) => !/^level:/.test(line));
+    return `---\n${[...kept, `level: ${level}`].join("\n")}\n---\n${body}`;
+  }
+
   // ---- How the seller groups and orders the cards: two picks, kept in a small file of the tab that is no card ----
-  const WAYS = ["kind", "level", "time"], IN_FOR = { kind: "level", level: "time", time: "level" };
-  const KEYS = { kind: ["asks", "tells"], level: ["3", "2", "1"], time: ["today", "three", "older"] };
+  // Unread and read, a fourth way beside kind, urgency and time, in both picks.
+  const WAYS = ["kind", "level", "time", "read"], IN_FOR = { kind: "level", level: "time", time: "level", read: "level" };
+  const KEYS = { kind: ["asks", "tells"], level: ["3", "2", "1"], time: ["today", "three", "older"], read: ["new", "seen"] };
   const PICKS = "inbox.json";
   const P = { by: "kind", in: "level" };
   function readPicks(text) {
@@ -267,11 +382,39 @@
     void board.write(DONE_LIST, `${said}\n`).catch(() => {});
   }
 
+  // ---- The cards the seller opened, kept in a file of the tab of their own, each with the time the board gave its file then ----
+  /** File → the time its file had when the seller opened the card: a card cx wrote again since has another time, and its dot is back. */
+  const OPENED = "inbox-opened.json";
+  const opened = new Map();
+  /** The list as another page left it (the card's own tab writes it too), joined to what this page holds. */
+  const readOpened = () => board.read(OPENED).then((text) => {
+    const kept = json(text);
+    if (kept === null || typeof kept !== "object" || Array.isArray(kept)) return;
+    for (const [file, at] of Object.entries(kept)) if (typeof at === "number" && (opened.get(file) ?? 0) <= at) opened.set(file, at);
+  }, () => {});
+  const openedFirst = readOpened();
+  const seen = (c) => opened.get(c.file) === c.modified;
+  function see(c) {
+    if (seen(c)) return;
+    opened.set(c.file, c.modified);
+    draw();
+    void board.write(OPENED, `${JSON.stringify(Object.fromEntries(opened))}\n`).catch(() => {});
+  }
+  /** The page's own write to a card's file (✓, ×, an answer, a level, a card back from 已处理) leaves an opened card opened: only cx writing
+   *  the card again brings its dot back. */
+  function carry(file, from, to) {
+    if (opened.get(file) !== from || from === to) return;
+    opened.set(file, to);
+    void board.write(OPENED, `${JSON.stringify(Object.fromEntries(opened))}\n`).catch(() => {});
+  }
+
   // ---- What the tab holds ----
-  const S = { cards: new Map(), view: "now", find: "", whole: new Set(), shown: new Set(), weeks: new Set(), gone: new Map(), menu: undefined, failed: new Set(), busy: new Set(), fields: new Map(), asking: new Map(), drawn: new Map(), drawing: new Set(), ready: false };
+  const S = { cards: new Map(), view: "now", find: "", shown: new Set(), weeks: new Set(), gone: new Map(), menu: undefined, failed: new Set(), busy: new Set(), fields: new Map(), asking: new Map(), drawn: new Map(), drawing: new Set(), ready: false, levels: undefined, copied: undefined, alone: undefined };
   let reading = false, again = false, first = true;
   /** Done cards known from the done list and not read: file → the time the board gives it. 已处理, or a card brought into view, reads them. */
   const unread = new Map();
+  /** The files the board handed in by `file`, for a card on a tab of its own. */
+  const handed = new Set();
   let doneWanted = false;
   const wantDone = () => { if (doneWanted) return; doneWanted = true; if (unread.size > 0) void load(); };
   const pause = (ms) => new Promise((done) => setTimeout(done, ms));
@@ -315,10 +458,14 @@
       }
     } catch { /* the board said no: what was read stands */ }
     await picked;
+    await openedFirst;
+    await readOpened();
     reading = false;
     if (listed !== undefined) {
       // A card the seller pressed while the read was out keeps the press.
       for (const [file, c] of S.cards) if (S.busy.has(file) && read.has(file)) read.set(file, c);
+      // A file the board handed in while the read was out stands where the read's copy is not newer, or the read has none, as `file` judges.
+      for (const [file, c] of S.cards) { const got = read.get(file); if (got === undefined ? handed.has(file) : !(got.modified >= c.modified)) read.set(file, c); }
       for (const file of [...S.cards.keys()]) if (!read.has(file)) { S.fields.delete(file); S.asking.delete(file); }
       S.cards = read;
       S.ready = true;
@@ -328,7 +475,7 @@
       keepDone();
     }
     // A card this read brought that the page did not hold asks for the board, by the card's own name; the first read asks for none.
-    const fresh = first ? [] : [...S.cards.values()].filter((c) => c.done === undefined && !held.has(c.file)).sort((a, b) => b.modified - a.modified);
+    const fresh = first ? [] : [...S.cards.values()].filter((c) => c.done === undefined && !held.has(c.file)).sort((a, b) => b.at - a.at);
     if (listed !== undefined) first = false;
     if (fresh.length > 0) void board.show(fresh[0].file).catch(() => {});
     draw();
@@ -340,13 +487,13 @@
   const startOf = (at) => new Date(at).setHours(0, 0, 0, 0);
   /** The group of time a card is in, by when it was written or done: today, within three days, older. */
   function groupOf(at) { const ago = Math.round((startOf(Date.now()) - startOf(at)) / (24 * 60 * 60 * 1000)); return ago <= 0 ? "today" : ago <= 3 ? "three" : "older"; }
-  const keyOf = (way, c, at = c.modified) => (way === "kind" ? (c.asks ? "asks" : "tells") : way === "level" ? String(rank(c)) : groupOf(at));
-  const FIRST = { level: (a, b) => rank(b) - rank(a), time: () => 0, kind: (a, b) => Number(b.asks) - Number(a.asks) };
+  const keyOf = (way, c, at = c.at) => (way === "kind" ? (c.asks ? "asks" : "tells") : way === "level" ? String(rank(c)) : way === "read" ? (seen(c) ? "seen" : "new") : groupOf(at));
+  const FIRST = { level: (a, b) => rank(b) - rank(a), time: () => 0, kind: (a, b) => Number(b.asks) - Number(a.asks), read: (a, b) => Number(seen(a)) - Number(seen(b)) };
   /** What waits: a column after a column, each in its order. */
   function waiting() {
     const column = (c) => KEYS[P.by].indexOf(keyOf(P.by, c));
     return [...S.cards.values()].filter((c) => c.done === undefined)
-      .sort((a, b) => column(a) - column(b) || FIRST[P.in](a, b) || b.modified - a.modified);
+      .sort((a, b) => column(a) - column(b) || FIRST[P.in](a, b) || b.at - a.at);
   }
   const done = () => [...S.cards.values()].filter((c) => c.done !== undefined).sort((a, b) => b.doneAt - a.doneAt);
 
@@ -356,12 +503,13 @@
     const now = await board.read(c.file);
     // An answer is written only onto the questions it answers: a file whose questions are others by now stands as the disk has it.
     if (answers !== undefined && JSON.stringify(readCard(c.file, c.modified, now).form) !== JSON.stringify(c.form)) { S.cards.set(c.file, readCard(c.file, c.modified, now)); return; }
-    const text = marked(now, { done: how, at: Date.now(), answer, answers });
+    const text = stamped(marked(now, { done: how, at: Date.now(), answer, answers }), c.at);
     const wrote = await board.write(c.file, text);
+    carry(c.file, c.modified, wrote.modified);
     S.cards.set(c.file, readCard(c.file, wrote.modified, text));
   }
   /** The card as the press leaves it, drawn at the press: its time stays the file's, so a read before the write lands keeps it. */
-  const moved = (c, how, answer, answers) => S.cards.set(c.file, readCard(c.file, c.modified, marked(c.text, { done: how, at: Date.now(), answer, answers })));
+  const moved = (c, how, answer, answers) => S.cards.set(c.file, readCard(c.file, c.modified, stamped(marked(c.text, { done: how, at: Date.now(), answer, answers }), c.at)));
   async function tick(c) {
     if (S.busy.has(c.file)) return;
     const at = waiting().indexOf(c);
@@ -383,7 +531,7 @@
     moved(c, "answered", words, answers);
     draw(); focusAfter(at);
     try { await board.send(words, { card: c.file }); }
-    catch { S.cards.set(c.file, c); S.busy.delete(c.file); S.failed.add(c.file); if (answers !== undefined && c.form !== undefined) S.asking.set(c.file, asking(c, answers)); draw(); (S.fields.get(c.file)?.querySelector("textarea") ?? document.getElementById(idOf(c.file)))?.focus(); return false; }
+    catch { S.cards.set(c.file, c); S.busy.delete(c.file); S.failed.add(c.file); if (answers !== undefined && c.form !== undefined) S.asking.set(c.file, asking(c, answers, S.view === "card" && S.alone === c.file)); draw(); (S.fields.get(c.file)?.querySelector("textarea") ?? document.getElementById(idOf(c.file)))?.focus(); return false; }
     S.failed.delete(c.file);
     S.fields.delete(c.file);
     S.asking.delete(c.file);
@@ -413,7 +561,7 @@
     S.busy.add(file);
     draw();
     if (c !== undefined) {
-      try { const text = marked(await board.read(file), undefined); const wrote = await board.write(file, text); S.cards.set(file, readCard(file, wrote.modified, text)); sayIt(W.said.back()); } catch { /* it stays done */ }
+      try { const text = stamped(marked(await board.read(file), undefined), c.at); const wrote = await board.write(file, text); carry(file, c.modified, wrote.modified); S.cards.set(file, readCard(file, wrote.modified, text)); sayIt(W.said.back()); } catch { /* it stays done */ }
     }
     S.gone.delete(file);
     S.asking.delete(file);
@@ -421,6 +569,34 @@
     draw();
     document.getElementById(idOf(file))?.focus();
   }
+
+  /** A level chosen by the seller is written into the card's file, as a press's mark is; the card moves to where its level puts it and the keyboard goes with it. */
+  async function relevel(c, level) {
+    const mark = () => document.getElementById(idOf(c.file))?.querySelector(".t-level");
+    if (S.busy.has(c.file)) return;
+    if (c.level === level) { draw(); mark()?.focus(); return; }
+    S.busy.add(c.file);
+    S.cards.set(c.file, readCard(c.file, c.modified, stamped(leveled(c.text, level), c.at)));
+    draw(); mark()?.focus(); sayIt(W.levelSaid[level - 1]());
+    try { const text = stamped(leveled(await board.read(c.file), level), c.at); const wrote = await board.write(c.file, text); carry(c.file, c.modified, wrote.modified); S.cards.set(c.file, readCard(c.file, wrote.modified, text)); }
+    catch { S.cards.set(c.file, c); /* the card is back as it was */ }
+    S.busy.delete(c.file);
+    draw();
+  }
+  /** 复制 puts the card's title and words on the clipboard and says 已复制 for a moment, to the eye and to a screen reader, as the chat's row does. */
+  const COPIED_MS = 1500;
+  async function copy(c) {
+    const text = `${c.title}\n\n${c.body.trim()}`;
+    try { await navigator.clipboard.writeText(text); } catch { return; } // a board that does not let the page write the clipboard: no tick, nothing said
+    S.copied = c.file;
+    draw(); sayIt(W.copied());
+    document.getElementById(idOf(c.file))?.querySelector(".t-copy")?.focus({ preventScroll: true });
+    setTimeout(() => { if (S.copied === c.file) { S.copied = undefined; draw(); } }, COPIED_MS);
+  }
+
+  /** The Inbox that has never held a card, as the board draws an empty board: the Inbox's mark in the board's pen, a title,
+   *  one line on how to have cx put something here. Today's line goes; 暂无待处理, once every card is done, stays. */
+  const voidOf = () => h("div", { class: "t-void" }, icon(...GLYPH.tray), h("h2", { class: "t-void-title" }, W.noneYetTitle()), h("p", { class: "t-void-line" }, W.noneYet()));
 
   // ---- Drawing ----
   /**
@@ -447,6 +623,7 @@
   const status = h("p", { class: "unseen", role: "status" });
   const sayIt = (words) => { status.textContent = ""; setTimeout(() => { status.textContent = words; }, 50); };
   function focusAfter(at) {
+    if (S.view === "card") { document.getElementById(idOf(S.alone))?.focus(); return; }
     const list = waiting();
     const to = list[Math.min(at, list.length - 1)];
     (to ? document.getElementById(idOf(to.file)) : document.querySelector(".t-top > .t-quiet"))?.focus();
@@ -459,10 +636,11 @@
    * again a second later. At most `DRAWING` are out at once, the rest asked as those end, so the frame's 32 asks out keep room for the
    * tab's reads, the icon's count and the seller's presses.
    */
-  function wordsOf(c, attrs) {
+  function wordsOf(c, attrs, whole = false) {
     const drawn = S.drawn.get(c.file);
     if (drawn?.modified === c.modified && drawn.html !== null) {
-      const box = h("div", { ...attrs, class: `${attrs.class ?? ""} markdown`.trim() });
+      const rules = whole ? "markdown-body" : "markdown";
+      const box = h("div", { ...attrs, class: `${attrs.class ?? ""} ${rules}`.trim() });
       box.innerHTML = drawn.html;
       return box;
     }
@@ -487,7 +665,7 @@
   const SVG = "http://www.w3.org/2000/svg";
   function bars(level) {
     const svg = document.createElementNS(SVG, "svg");
-    svg.setAttribute("class", "t-bars"); svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", `t-bars t-l${level}`); svg.setAttribute("viewBox", "0 0 16 16"); svg.setAttribute("aria-hidden", "true");
     [[1.5, 9.5, 5], [6.5, 6, 8.5], [11.5, 2.5, 12]].forEach(([x, y, height], at) => { const bar = document.createElementNS(SVG, "rect"); bar.setAttribute("x", x); bar.setAttribute("y", y); bar.setAttribute("width", 3); bar.setAttribute("height", height); bar.setAttribute("rx", 1); if (at < level) bar.setAttribute("class", "lit"); svg.append(bar); });
     return svg;
   }
@@ -501,43 +679,83 @@
     const mark = box.querySelector(".t-level");
     const tip = h("div", { class: "t-tip", "aria-hidden": "true" }, W.levelWords[c.level - 1]());
     box.append(tip);
-    tip.style.left = `${Math.min(mark.offsetLeft + mark.offsetWidth + 6, box.clientWidth - tip.offsetWidth - 6)}px`;
-    tip.style.top = `${mark.offsetTop + mark.offsetHeight / 2}px`;
+    // The mark stands in the line under the title, which holds the level's menu; the small card is placed from where both are drawn.
+    const at = mark.getBoundingClientRect(), edge = box.getBoundingClientRect();
+    tip.style.left = `${Math.min(at.right - edge.left - box.clientLeft + 6, box.clientWidth - tip.offsetWidth - 6)}px`;
+    tip.style.top = `${at.top - edge.top - box.clientTop + at.height / 2}px`;
     tip.style.transform = "translateY(-50%)";
   }
   /** The line under a card's title: its mark of urgency, then its time. The mark shows what it means as the kit's label does: under the pointer and the keyboard's focus; Escape takes it away. */
-  function meta(c) {
-    const when = h("time", { class: "t-when", datetime: new Date(c.modified).toISOString() }, clock(c.modified));
-    const mark = h("button", { type: "button", class: "t-level", "aria-label": W.levelSaid[c.level - 1](),
-      onmouseenter: () => showTip(c, true), onmouseleave: () => showTip(c, false), onfocus: () => { if (mark.matches(":focus-visible")) showTip(c, true); }, onblur: () => showTip(c, false),
-      onkeydown: (event) => { if (event.key === "Escape") showTip(c, false); } }, bars(c.level));
-    return h("div", { class: "t-meta" }, mark, when);
+  function meta(c, acts) {
+    const when = h("time", { class: "t-when", datetime: new Date(c.at).toISOString() }, clock(c.at));
+    // A press on the mark opens the level's menu where the mark is; ↓ opens it too, as on the two presses at the page's head.
+    const open = S.levels === c.file;
+    const mark = h("button", { type: "button", class: "t-level", "aria-label": W.levelSaid[c.level - 1](), "aria-haspopup": "menu", "aria-expanded": String(open),
+      onmouseenter: () => { if (S.levels !== c.file) showTip(c, true); }, onmouseleave: () => showTip(c, false), onfocus: () => { if (mark.matches(":focus-visible") && S.levels !== c.file) showTip(c, true); }, onblur: () => showTip(c, false),
+      onclick: () => { showTip(c, false); if (open) shutLevels(c); else openLevels(c); },
+      onkeydown: (event) => { if (event.key === "Escape") showTip(c, false); if (event.key === "ArrowDown" && !open) { event.preventDefault(); openLevels(c); } } }, bars(c.level));
+    return h("div", { class: "t-meta" }, mark, when, acts, open && levelMenu(c));
   }
+  function openLevels(c) { S.levels = c.file; showTip(c, false); draw(); document.querySelector(`#${idOf(c.file)}-levels [aria-checked="true"]`)?.focus(); }
+  function shutLevels(c) { S.levels = undefined; draw(); document.getElementById(idOf(c.file))?.querySelector(".t-level")?.focus(); }
+  /** The level's menu, drawn as the page's two presses draw theirs: the three levels, the most urgent first, the one in force ticked. */
+  function levelMenu(c) {
+    const name = W.way("in", "level");
+    const item = (k) => h("button", { type: "button", role: "menuitemradio", "aria-checked": String(c.level === k), onclick: () => { S.levels = undefined; void relevel(c, k); } },
+      h("span", { class: "t-ticked" }, c.level === k && icon(...GLYPH.tick)), bars(k), h("span", {}, W.levelWords[k - 1]()));
+    return h("div", { class: "t-menu t-levels", role: "menu", id: `${idOf(c.file)}-levels`, "aria-label": name,
+      onkeydown: (event) => {
+        const all = [...event.currentTarget.querySelectorAll("button")], at = all.indexOf(document.activeElement);
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); shutLevels(c); }
+        else if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); all[(at + (event.key === "ArrowDown" ? 1 : all.length - 1)) % all.length].focus(); }
+        else if (event.key === "Tab") { S.levels = undefined; setTimeout(draw, 0); }
+      } }, h("div", { role: "group", "aria-label": name }, [3, 2, 1].map(item)));
+  }
+  /** 复制, drawn as the chat's row draws it: its mark, and for a moment after the press a tick and 已复制. */
+  function copyMark(c) {
+    const done = S.copied === c.file;
+    return h("button", { type: "button", class: "t-mark t-copy", title: done ? W.copied() : W.copy(), "aria-label": done ? W.copied() : named(W.copy(), c.title), onclick: () => void copy(c) }, icon(...GLYPH[done ? "tick" : "copy"]));
+  }
+  /** 引用, the chat's quote of a message: the whole card goes over the message box, and the chat writes where it came from. A board
+   *  window of its own has no message box, so the press is not drawn there. */
+  const quotes = () => board.context?.quote === true;
+  function quoteMark(c) {
+    if (!quotes()) return undefined;
+    const text = `${c.title}\n\n${c.body.trim()}`;
+    return h("button", { type: "button", class: "t-mark t-quote", title: W.quote(), "aria-label": named(W.quote(), c.title),
+      onclick: () => void board.quote({ text, card: c.file, title: c.title, whole: true }).catch(() => {}) }, icon(...GLYPH.quote));
+  }
+  /** The acts at a card's corner: 引用 and 复制, then the card's own ✓ where it tells (a card that asks has its × at the corner after its box). */
+  const acts = (c) => h("span", { class: "t-acts" }, quoteMark(c), copyMark(c), !c.asks && markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), S.busy.has(c.file)));
+  /** The card's title, the press that opens the whole card on a tab of its own, by the road a file's tab is; it opens the card, so its dot goes.
+   *  A card not opened is named as main names a tab with something not seen (「{name}，有新内容」, "{name}, new"): its title, then the state. */
+  const nameOf = (c, words = [c.title]) => h("button", { type: "button", class: "t-name", dir: "auto", "aria-label": seen(c) ? undefined : W.unreadName(c.title), onclick: () => { see(c); void board.open({ file: c.file }).catch(() => {}); } },
+    h("span", {}, ...words));
 
   /** A waiting card's element, built again when its file, the language, its fold, a press on it or the drawing of its words changed. */
   function card(c) {
     if (c.form !== undefined) {
       let asked = S.asking.get(c.file);
       if (asked === undefined || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c));
-      return keep(`card:${c.file}`, [c.modified, asked.n, S.busy.has(c.file), S.failed.has(c.file)].join("|"), () => askingCard(c));
+      return keep(`card:${c.file}`, [c.modified, c.level, asked.n, S.busy.has(c.file), S.failed.has(c.file), S.levels === c.file, S.copied === c.file, seen(c), quotes()].join("|"), () => askingCard(c));
     }
     askWords(c);
-    return keep(`card:${c.file}`, [c.modified, Kit.lang, S.whole.has(c.file), S.busy.has(c.file), S.failed.has(c.file), drawnOf(c)].join("|"), () => cardOf(c));
+    return keep(`card:${c.file}`, [c.modified, c.level, Kit.lang, S.busy.has(c.file), S.failed.has(c.file), drawnOf(c), S.levels === c.file, S.copied === c.file, seen(c), quotes()].join("|"), () => cardOf(c));
   }
   function cardOf(c) {
-    const whole = S.whole.has(c.file), busy = S.busy.has(c.file), id = idOf(c.file);
+    const busy = S.busy.has(c.file), id = idOf(c.file);
     const failed = S.failed.has(c.file);
-    const words = wordsOf(c, { class: `t-words entry-body${whole ? "" : " cut"}`, dir: "auto" });
-    const more = h("button", { type: "button", class: "t-quiet t-more", "aria-expanded": String(whole), hidden: !whole, onclick: () => { if (whole) S.whole.delete(c.file); else S.whole.add(c.file); draw(); document.getElementById(id)?.querySelector(".t-more")?.focus(); } }, h("span", {}, whole ? W.less() : W.more()));
+    // No 展开 — the card keeps its size, and the whole card is one press away on its own tab.
+    const words = wordsOf(c, { class: "t-words entry-body", dir: "auto" });
     const box = c.asks && fieldOf(c.file), field = box && box.querySelector("textarea");
     if (field) { field.disabled = busy; field.placeholder = W.reply(); field.setAttribute("aria-label", W.replyTo(c.title)); if (failed) field.setAttribute("aria-describedby", `${id}-fail`); else field.removeAttribute("aria-describedby"); }
     // An asking card's × comes after its answer and Send, so Tab meets them first; it is drawn at the card's corner all the same.
-    return h("li", {}, h("article", { class: `entry t-card${c.asks ? " t-asks" : ""}`, id, tabindex: "-1", "data-file": c.file },
+    return h("li", {}, h("article", { class: `entry t-card${c.asks ? " t-asks" : ""}${seen(c) ? "" : " t-new"}`, id, tabindex: "-1", "data-file": c.file },
       h("div", { class: "t-head" },
-        h("h3", { class: `entry-title${whole ? "" : " cut"}`, dir: "auto" }, c.title),
-        !c.asks && markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), busy)),
+        h("h3", { class: "entry-title" }, nameOf(c)),
+        acts(c)),
       meta(c),
-      words, more,
+      words,
       box,
       failed && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent()),
       c.asks && markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy)));
@@ -559,7 +777,7 @@
    * own words put back through its own controls, on the last question, where they pressed.
    */
   let askings = 0;
-  function asking(c, sent) {
+  function asking(c, sent, alone = false) {
     const under = meta(c);
     const element = Kit.questions({ form: c.form, words: W.asked(), under, answer: (value) => {
       const now = S.cards.get(c.file) ?? c;
@@ -573,16 +791,29 @@
       for (const name of one?.chosen ?? []) pick(`o${c.form.questions[at].options.findIndex((option) => option.name === name)}`);
       if (one?.own !== undefined) { pick("other"); const own = press("own"); if (own) { own.value = one.own; own.dispatchEvent(new Event("input")); } }
     });
-    return { form: JSON.stringify(c.form), lang: Kit.lang, modified: c.modified, under, element, n: ++askings };
+    // The question the kit draws at the top is the card's title press, its words kept: the kit draws it again at each pick and turn.
+    const titled = () => {
+      const title = element.querySelector(":scope > .entry-title");
+      if (title === null) return;
+      const name = title.querySelector(":scope > .t-name");
+      title.replaceChildren(nameOf(S.cards.get(c.file) ?? c, name === null ? [...title.childNodes] : [...name.firstChild.childNodes]));
+    };
+    // On the card's own tab the card's title is the page's heading, so the question keeps the kit's own words.
+    if (!alone) {
+      titled();
+      new MutationObserver((changes) => { if (changes.some((one) => one.target === element)) titled(); }).observe(element, { childList: true });
+    }
+    return { form: JSON.stringify(c.form), lang: Kit.lang, modified: c.modified, under, element, titled: alone ? () => {} : titled, alone, n: ++askings };
   }
   function askingCard(c) {
     const busy = S.busy.has(c.file), id = idOf(c.file), failed = S.failed.has(c.file);
     let asked = S.asking.get(c.file);
     // One element for as long as the card's questions are the same in one language: a rewrite of its words alone keeps it, and its time.
-    if (asked === undefined || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c));
-    else if (asked.modified !== c.modified) { asked.under.replaceChildren(...meta(c).childNodes); asked.modified = c.modified; }
-    return h("li", {}, h("article", { class: "entry t-card t-asks t-form", id, tabindex: "-1", "data-file": c.file },
-      asked.element,
+    if (asked === undefined || asked.alone || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c));
+    else { asked.under.replaceChildren(...meta(c).childNodes); asked.modified = c.modified; }
+    asked.titled();
+    return h("li", {}, h("article", { class: `entry t-card t-asks t-form${seen(c) ? "" : " t-new"}`, id, tabindex: "-1", "data-file": c.file },
+      asked.element, quoteMark(c), copyMark(c),
       failed && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent()),
       markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy)));
   }
@@ -629,6 +860,7 @@
   const headOf = (key, count, past) => (P.by === "kind" && !past ? [W.count(key === "asks" ? count : 0, key === "tells" ? count : 0)]
     : P.by === "kind" ? [h("span", {}, W.kinds[key]()), h("span", { class: "t-n" }, String(count))]
     : P.by === "time" ? [h("span", {}, W.groups[key]()), h("span", { class: "t-n" }, String(count))]
+    : P.by === "read" ? [h("span", {}, W.reads[key]()), h("span", { class: "t-n" }, String(count))]
     : [h("span", { class: "t-level" }, bars(Number(key))), h("span", {}, W.levelWords[Number(key) - 1]()), h("span", { class: "t-n" }, String(count))]);
   /** The page's columns: `n` of them, headings and grounds where there is more than one. The page is one width whatever `n`, so the presses do not move. */
   function lay(n) {
@@ -661,7 +893,9 @@
       sync(part.lastChild, rows.map((one) => one.row));
       return part;
     };
-    if (list.length === 0 && S.gone.size === 0) out.push(keep("empty", [S.cards.size > 0, Kit.lang].join("|"), () => h("p", { class: "board-empty" }, S.cards.size > 0 ? W.none() : W.noneYet())));
+    // The welcome is for an Inbox that never had a card: done cards not read yet are cards it had.
+    const had = S.cards.size > 0 || unread.size > 0;
+    if (list.length === 0 && S.gone.size === 0) out.push(keep("empty", [had, Kit.lang].join("|"), () => had ? h("p", { class: "board-empty" }, W.none()) : voidOf()));
     else {
       const all = keep("all", "", () => h("div", { class: "t-all" }));
       const parts = keep("parts", "", () => h("div", { class: "t-parts" }));
@@ -732,28 +966,62 @@
     out.push(box);
     return out;
   }
+  /** The card on a tab of its own, as the board hands the page its file: the whole card, its acts where the card has them. */
+  function cardView() {
+    const c = S.cards.get(S.alone);
+    if (c === undefined) return [];
+    askWords(c);
+    // The card is open on its tab, so its dot goes, wherever the tab was opened from.
+    if (!seen(c)) setTimeout(() => see(c), 0);
+    return [keep(`alone:${c.file}`, [c.modified, c.level, c.done, Kit.lang, S.busy.has(c.file), S.failed.has(c.file), S.levels === c.file, drawnOf(c), S.asking.get(c.file)?.n].join("|"), () => aloneOf(c))];
+  }
+  function aloneOf(c) {
+    const busy = S.busy.has(c.file), id = idOf(c.file), failed = S.failed.has(c.file), open = c.done === undefined;
+    const fail = failed && h("p", { class: "t-fail", id: `${id}-fail`, role: "alert" }, W.unsent());
+    if (open && c.form !== undefined) {
+      let asked = S.asking.get(c.file);
+      if (asked === undefined || !asked.alone || asked.form !== JSON.stringify(c.form) || asked.lang !== Kit.lang) S.asking.set(c.file, asked = asking(c, undefined, true));
+      else asked.under.replaceChildren(...meta(c).childNodes);
+      // The whole card: its title and its words, and its question under them.
+      return h("article", { class: "t-page t-asks t-form t-card", id, tabindex: "-1", "data-file": c.file, "aria-labelledby": `${id}-title` },
+        h("div", { class: "t-page-head" },
+          h("h1", { class: "t-page-title", id: `${id}-title`, dir: "auto" }, c.title),
+          markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy)),
+        wordsOf(c, { class: "t-page-words", dir: "auto" }, true),
+        asked.element, fail);
+    }
+    const box = open && c.asks && fieldOf(c.file), field = box && box.querySelector("textarea");
+    if (field) { field.disabled = busy; field.placeholder = W.reply(); field.setAttribute("aria-label", W.replyTo(c.title)); }
+    const done = !open && h("div", { class: "t-meta" }, h("span", { class: "t-level" }, bars(c.level)), h("span", { class: "t-when" }, W.at(W.how[c.done](), day(c.doneAt))));
+    return h("article", { class: `t-page t-card${c.asks ? " t-asks" : ""}`, id, tabindex: "-1", "data-file": c.file, "aria-labelledby": `${id}-title` },
+      h("div", { class: "t-page-head" },
+        h("h1", { class: "t-page-title", id: `${id}-title`, dir: "auto" }, c.title),
+        open && (c.asks ? markPress("out", W.dismiss(), W.dismissIt(c.title), () => void dismiss(c), busy) : markPress("tick", W.tick(), W.tickIt(c.title), () => void tick(c), busy))),
+      open ? meta(c) : done,
+      wordsOf(c, { class: "t-page-words", dir: "auto" }, true),
+      !open && c.done === "answered" && c.answer && h("p", { class: "t-yours", dir: "auto" }, `${W.you()}${w(": ", "：")}${c.answer}`),
+      box, fail,
+      !open && c.done === "dismissed" && h("p", { class: "t-gone" }, h("button", { type: "button", class: "t-quiet", disabled: busy, onclick: () => void undo(c.file) }, h("span", {}, W.undo()))));
+  }
   // The count the board holds, set once it is answered; one refused is asked again at the next drawing.
   let counted, counting;
-  /** The width and the columns each card's fold was measured at: measured again only for a card built anew, or when the page's width or its columns change, a pick of grouping too. */
-  const folded = new WeakMap();
   function draw() {
     if (!S.ready) { page.replaceChildren(status); return; }
     const typing = document.activeElement?.matches?.(".t-card input, .t-card textarea") ? document.activeElement : undefined;
     const held = typing === undefined && document.activeElement?.matches?.(".t-card, .t-open") ? document.activeElement.closest("[id]")?.id : undefined;
+    const pressed = typing === undefined && held === undefined ? document.activeElement?.closest?.("[data-file]") : undefined;
+    const spot = pressed ? { file: pressed.dataset.file, at: [...pressed.querySelectorAll("button")].indexOf(document.activeElement) } : undefined;
     keeping = new Set();
-    sync(page, [S.view === "history" ? historyView() : nowView(), status]);
+    sync(page, [S.view === "card" ? cardView() : S.view === "history" ? historyView() : nowView(), status]);
     for (const name of [...kept.keys()]) if (!keeping.has(name)) kept.delete(name);
     if (held !== undefined && document.activeElement?.closest?.("[id]")?.id !== held) { const back = document.getElementById(held); (back?.matches("li") ? back.querySelector("button") : back)?.focus({ preventScroll: true }); }
-    const laid = `${innerWidth} ${page.className}`;
-    for (const box of page.querySelectorAll(".t-card:not(.t-form)")) {
-      if (folded.get(box) === laid) continue;
-      folded.set(box, laid);
-      const words = box.querySelector(".t-words"), more = box.querySelector(".t-more"), name = box.querySelector(".entry-title");
-      if (words.classList.contains("cut")) more.hidden = !(words.scrollHeight > words.clientHeight + 1 || name.scrollHeight > name.clientHeight + 1);
-    }
+    if (spot !== undefined && spot.at >= 0 && !document.activeElement?.closest?.("[data-file]")) document.querySelector(`[data-file="${CSS.escape(spot.file)}"]`)?.querySelectorAll("button")[spot.at]?.focus({ preventScroll: true });
     if (typing?.isConnected) typing.focus({ preventScroll: true });
+    for (const card of page.querySelectorAll(".entry.t-card.t-asks")) long(card);
     // A draw while a mark's small card is open (a card landing, the board pulled wider) leaves it open.
     if (tipFor !== undefined) { const c = S.cards.get(tipFor); if (c !== undefined && S.view === "now") showTip(c, true); }
+    // The card's own tab holds no count of the Inbox's.
+    if (S.view === "card") return;
     const list = waiting();
     const asks = list.filter((c) => c.asks).length, tells = list.length - asks;
     const words = W.count(asks, tells);
@@ -764,12 +1032,22 @@
     }
   }
 
+  // The board opens a card's file on a tab of its own with this page, as it opens a file with its viewer, and hands it the file: `file`
+  // is its path in the Inbox's tab, the name the page's list gives it.
+  board.on("file", (given) => { const file = given.file; if (typeof file !== "string") return; handed.add(file); if (typeof given.text === "string" && !(S.cards.get(file)?.modified >= given.modified)) S.cards.set(file, readCard(file, given.modified, given.text)); S.alone = file; S.view = "card"; draw(); });
+  /** Whether a card's answer has outgrown the box's resting size, measured as it is typed and at each drawing. */
+  function long(card) { const field = card.querySelector(".cx-box textarea"); if (!field) return; field.dataset.rest ??= field.value === "" ? String(field.offsetHeight) : ""; card.classList.toggle("t-long", field.dataset.rest !== "" && field.offsetHeight > Number(field.dataset.rest) + 1); }
+  page.addEventListener("input", (event) => { const card = event.target.closest?.(".entry.t-card"); if (card) long(card); });
   board.on("files", () => void load());
   board.on("context", () => draw());
-  // A board pulled wider or narrower cuts a card's words at another place, so 「展开」 is measured again.
+  // A board pulled wider or narrower draws again, so a mark's small card that is open stays beside its mark.
   addEventListener("resize", () => draw());
   // A press anywhere else shuts a press's menu.
-  addEventListener("click", (event) => { if (S.menu !== undefined && !event.target.closest?.(".t-sort")) { S.menu = undefined; draw(); } });
+  addEventListener("click", (event) => {
+    if (S.menu !== undefined && !event.target.closest?.(".t-sort")) { S.menu = undefined; draw(); }
+    // And the level's menu, but for a press on its own mark, which shuts it itself.
+    if (S.levels !== undefined && !event.target.closest?.(".t-levels, .t-level")) { S.levels = undefined; draw(); }
+  });
   // The board asks for a card once the page is shown, which may be before its first read: the card is brought into view once it is read.
   let wanted;
   board.on("focus", (file) => { wanted = file; bring(); });
